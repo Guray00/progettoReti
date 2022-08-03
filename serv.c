@@ -309,6 +309,10 @@ int main(int argc, char* argv[]){
                     exit(-1);
                 }
 
+                if(len == 0){
+                    continue;
+                }
+
                 // ricevo nel formato: CODE USERNAME PASSWORD
                 sscanf(buffer, "%hd %s %s", &request, &usr.username, &usr.pw);
                 request = ntohs(request);
