@@ -1,19 +1,19 @@
 # make rule primaria con dummy target ‘all’--> non crea alcun file all ma fa un complete build
 # che dipende dai target client e server scritti sotto
 
-all: dev server
+all: dev serv
 
 # make rule per il client
 dev: dev.o
-	gcc -Wall client.o -o dev
+	gcc -Wall dev.o ./utils/costanti.h -o dev
 
 # make rule per il server
-server: server.o
-	gcc	-Wall server.o -o server
+serv: serv.o
+	gcc	-Wall serv.o ./API/logger.c ./utils/costanti.h  -o serv
 
 # pulizia dei file della compilazione (eseguito con ‘make clean’ da terminale)
 clean:
-	rm *.o dev server	
+	rm *o dev serv	
 
 run:
 	bash run.sh
