@@ -23,7 +23,6 @@
 
 /**
   @brief initializes the simple logger.  Will automatically cleanup at program exit.
-
   @param log_file_path the file to log to
 */
 void init_logger(const char *log_file_path);
@@ -39,8 +38,7 @@ void slog_sync();
   @param ... variables to be put into the tokens.
 */
 #define slog(...) _slog(__FILE__,__LINE__,__VA_ARGS__)
-void _slog(char *msg,...);
+void _slog(char *f,int l,char *msg,...);
 
 
 #endif
-

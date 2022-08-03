@@ -5,11 +5,11 @@ all: dev serv
 
 # make rule per il client
 dev: dev.o
-	gcc -Wall dev.o ./utils/costanti.h -o dev
+	gcc -Wall dev.o ./API/logger.c ./utils/costanti.h  -o dev
 
 # make rule per il server
 serv: serv.o
-	gcc	-Wall serv.o ./API/logger.c ./utils/costanti.h  -o serv
+	gcc	-Wall serv.o ./API/logger.c ./utils/costanti.h -o serv
 
 # pulizia dei file della compilazione (eseguito con ‘make clean’ da terminale)
 clean:

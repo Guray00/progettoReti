@@ -9,11 +9,8 @@
 #include <time.h>
 #include <signal.h>
 #include "./utils/costanti.h"
-
-// DEFINIZIONI =============================
-
-// =========================================
-
+#include "./API/logger.h"
+#include <termios.h>
 
 // COSTANTI  ================================
 const char MENU[] = 
@@ -22,6 +19,18 @@ const char MENU[] =
     "***************************\n"
     "1) signup\n"
     "2) in\n\n"
+    "Selezionare quale operazione compiere: ";
+
+
+const char MENU2[] = 
+    "***************************\n"
+    " Utente: %s            \n"
+    "***************************\n"
+    "1) hanging\n"
+    "2) show\n"
+    "3) chat\n"
+    "4) share\n"
+    "5) out\n\n"
     "Selezionare quale operazione compiere: ";
 
 const char ADDRESS[] = "127.0.0.1";
@@ -33,7 +42,7 @@ int
     sd,     // socket di ascolto
     csd;    // socket di comunicazione
 
-struct sockaddr_in servaddr;
+struct sockaddr_in servaddr, myaddr;
 
 
 // gestisce il segnale di interruzione
@@ -47,7 +56,8 @@ void intHandler() {
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
 
-    sd = socket(DOMAIN, SOCK_STREAM, 0);
+    sd  = socket(DOMAIN, SOCK_STREAM, 0);
+    //csd = socket(DOMAIN, SOCK_STREAM, 0);
 
     if(sd < 0){
         perror("Errore all'avvio del socket");
@@ -66,7 +76,7 @@ int init(const char* addr, int port){
         exit(-1);
     }
 
-    printf("* Socket connesso da: %s:%d\n", addr, port);
+    slog("Socket di ascolto attivo per device su: %d", port);
 }
 
 
@@ -86,7 +96,9 @@ void signup(){
 
     // dichiaro username e password
     struct user usr;
-    char buffer[32];
+    char buffer[MAX_REQUEST_LEN];
+    short int res_code;
+    uint16_t code = htons(0);
 
     printf("Inserire il nome utente: ");
     scanf("%s", &usr.username);
@@ -94,21 +106,113 @@ void signup(){
     printf("Inserire la password: ");
     scanf("%s", &usr.pw);
 
-    sprintf(buffer, "%s %s", usr.username, usr.pw);
+    // creo il buffer per la richiesta
+    sprintf(buffer, "%hd %s %s", code, &usr.username, &usr.pw);
 
-    //printf(buffer);
-    
+    // invio la richiesta
     ret = send(sd, (void *) buffer, sizeof(buffer), 0);
     if (ret < 0){
         perror("Errore invio dati per signup");
         exit(-1);
     }
+    else if (ret == 0){
+        perror("disconnessione server");
+        exit(-1);
+    }
+
+    ret = recv(sd, (void*) &res_code, sizeof(res_code), 0);
+    if(ret < 0){
+        perror("Errore ricezione per signup");
+        exit(-1);
+    }
+
+    res_code = ntohs(res_code);
+    slog("ricevuto codice di risposta: %d", res_code);
+
+    if(res_code < 0){
+        printf("Utente già utilizzato, selezionare un nome differente.\n\n");
+        fflush(stdout);
+    } else {
+        printf("Registrazione avvenuta con successo!\n\n");
+        fflush(stdout);
+    }
+    
 }
+
+
+void logged(char* username){
+
+    int answer = -1;
+
+    printf("\e[1;1H\e[2J");
+    printf(MENU2, username);
+
+    do{
+
+        scanf("%d", &answer);
+
+        switch (answer){
+        
+        
+        default:
+            break;
+        }
+
+    }while (answer == -1);
+}
+
+int login(){
+
+    // pulisce lo schermo
+    //printf("\e[1;1H\e[2J");
+    //printf(MENU2, );
+
+    struct user usr;
+    short int res_code;
+    int i;
+    uint16_t code = htons(1);
+    char buffer[MAX_REQUEST_LEN];
+
+
+    printf("Username: ________________\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+    scanf("%s", &usr.username);
+
+    printf("Password: ________________\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b");
+    scanf("%s", &usr.pw);
+
+    sprintf(buffer, "%hd %s %s", code, &usr.username, &usr.pw);
+
+    ret = send(sd, (void*) buffer, sizeof(buffer), 0);
+    if(ret < 0){
+        perror("Errore send request");
+        exit(-1);
+    } 
+    
+    ret = recv(sd, (void*) &res_code, sizeof(res_code), 0);
+    if(ret < 0){
+        perror("Errore ricezione per signup");
+        exit(-1);
+    }
+
+    res_code = ntohs(res_code);
+    slog("ricevuto codice di risposta: %d", res_code);
+
+    if(res_code < 0){
+        printf("Connessione rifiutata.\n\n");
+        fflush(stdout);
+    } else {
+        logged(usr.username);        
+    }
+    
+}
+
 
 int main(int argc, char* argv[]){
 
     int answer;
     uint16_t code;
+
+    init_logger("./.log"); 
     
     //  assegna la gestione del segnale di int
     signal(SIGINT, intHandler);
@@ -122,19 +226,13 @@ int main(int argc, char* argv[]){
         scanf("%d", &answer);
 
         switch(answer){
-            case 1:
-                code = htons(0); 
-                
-                ret = send(sd, (void*) &code, sizeof(code), 0);
-                if(ret < 0){
-                    perror("Errore send request");
-                    exit(-1);
-                }
-
-                signup();       
+            case 1:            
+                signup();   
+                printf(MENU);    
                 break;
 
             case 2:
+                login();
                 break;
 
             default:
@@ -143,7 +241,7 @@ int main(int argc, char* argv[]){
                 break;
         }
 
-    } while (answer == -1); //  ciclo fino a quando non è corretta
+    } while (1); //  ciclo fino a quando non è corretta
     
 
     return 0;
