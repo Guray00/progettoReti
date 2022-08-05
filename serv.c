@@ -8,9 +8,10 @@
 #include <stdlib.h>
 #include <time.h>
 #include <signal.h>
+
 #include "./API/logger.h"
 #include "./utils/costanti.h"
-
+#include "./source/register.h"
 
 // dichiarazione variabili ======================
 
@@ -77,7 +78,7 @@ int init(const char* addr, int port){
         exit(-1);
     }
 
-    slog("Avviato socket di ascolto su: %s:%d", addr, port); 
+    slog("server in ascolto su: %d", port); 
 }
 
 // trova la porta in cui deve avvenire la comunicazione
@@ -92,8 +93,11 @@ int findPort(int argc, char* argv[]){
 
 // gestisce il segnale di interruzione
 void intHandler() {
+    slog("********** server in chiusura ********");
     close(sd);
-    perror("Disconnesso");
+    slog("==> %d chiuso", sd);
+    close(csd);
+    slog("==> %d chiuso", csd);
     exit(0);
 }
 
@@ -239,11 +243,21 @@ int signup(struct user usr){
     return 0;
 }
 
+
+
+
 int login(struct user usr){
-    return auth(usr);
+    int flag = auth(usr);
+
+    // aggiornare il registro degli accessi
+    if (flag){
+        //updateRegister(usr);
+    }
+
+    return flag;
 }
 
-void sendResult(int value){
+void sendResponse(int value){
     short int response;
 
     if(value == 0){
@@ -260,6 +274,7 @@ void sendResult(int value){
 int main(int argc, char* argv[]){
 
     char buffer[MAX_REQUEST_LEN];
+    char param1[16], param2[16], param3[16];
     struct user usr;
 
     //  assegna la gestione del segnale di int
@@ -313,31 +328,45 @@ int main(int argc, char* argv[]){
                     continue;
                 }
 
-                // ricevo nel formato: CODE USERNAME PASSWORD
-                sscanf(buffer, "%hd %s %s", &request, &usr.username, &usr.pw);
+                // ricevo nel formato: codice parametro1, parametro2, parametro3
+                sscanf(buffer, "%hd %s %s %s", &request, &param1, &param2, &param3);
                 request = ntohs(request);
 
-                slog("Richiesta: %d | %s | %s", request, usr.username, usr.pw);
+
+                slog("request: %d | %s | %s | %s", request, param1, param2, param3);
 
                 // in base alla richiesta compio azioni differenti
                 switch(request){
                     case 0: // signup
+                        strcpy(usr.username, param1); 
+                        strcpy(usr.pw, param2);
+
                         ret = signup(usr);
-                        sendResult(ret);
+                        sendResponse(ret);
                         break;
 
                     case 1: // in
+                        strcpy(usr.username, param1); 
+                        strcpy(usr.pw, param2);
+
                         ret = login(usr);
-                        sendResult(ret);
+                        sendResponse(ret);
+                        slog("Risposta inviata");
+                        break;
+
+                    case 2: // device port
+                        //ret = get_device_port(param1);
+                        //slog("porta di %s disponibile a: %d", param1, port);
+
                         break;
 
                     default:
-                        request = -1;
+                        //request = -1:
                         slog("bad request");
                         break;
                 }
 
-            } while(request == -1);
+            } while(1);
 
             exit(0);
         }
