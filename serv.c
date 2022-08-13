@@ -309,7 +309,7 @@ int main(int argc, char* argv[]){
         // se sono nel figlio, devo gestire la richiesta
         if (pid == 0){
 
-            // non serve rimanere in ascolto
+            // non serve rimanere in ascolto di altri utenti
             close(sd);
 
             // per ogni richiesta cre un processo che 

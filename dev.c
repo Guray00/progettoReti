@@ -2,15 +2,17 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <string.h>
+#include <string.h> 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <time.h>
 #include <signal.h>
+#include <termios.h>
+
 #include "./utils/costanti.h"
 #include "./API/logger.h"
-#include <termios.h>
+#include "./source/chat.h"
 
 // COSTANTI  ================================
 const char MENU[] = 
@@ -43,26 +45,30 @@ int
     fdmax = -1,    // id di socket massimo
     csd;    // socket di comunicazione
 
-fd_set master, readers;
+fd_set master;
 
 struct connection DEVICE;
 
-struct sockaddr_in servaddr, myaddr;
+struct sockaddr_in 
+    servaddr,               // indirizzo del server
+    myaddr,                 // indirizzo del device
+    conectaddr,             // indirizzo del device a cui si manda la richiesta
+    ndaddr;                 // indirizzo del nuovo device
+
+
+struct device_info info;
 
 // gestisce il segnale di interruzione
 void intHandler() {
     int i;
 
-    slog("In chiusura  per SIGINT %s:%d", DEVICE.user.username, DEVICE.port);
+    slog("In chiusura  per SIGINT %s:%d, max socket: %d", DEVICE.username, DEVICE.port, fdmax);
 
     close(sd);
     slog("==> chiuso socket %d", sd);
-    /*if(listener >= 0) {
-        close(listener); 
-        slog("==> chiuso socket %d", listener);
-    }*/
-
-    for (i = 0; i < fdmax; i++){
+  
+    // vengono chiusi tutti i socket in uso dal device
+    for (i = 0; i <= fdmax; i++){
         close(i);
         slog("==> chiuso socket %d", i);
     }
@@ -75,7 +81,6 @@ void intHandler() {
 int init(const char* addr, int port){
 
     sd  = socket(DOMAIN, SOCK_STREAM, 0);
-    //csd = socket(DOMAIN, SOCK_STREAM, 0);
 
     if(sd < 0){
         perror("Errore all'avvio del socket");
@@ -100,7 +105,7 @@ int init(const char* addr, int port){
 
 
 
-// si occupa di recuperare la porta
+// recupera la porta inserita in fase di avvio
 int portCheck(int argc, char* argv[]){
     if(argc < 2){
         printf("Errore, porta non specificata\n");
@@ -111,7 +116,7 @@ int portCheck(int argc, char* argv[]){
 }
 
 
-// si occupa di far avvenire la registrazione per gli utenti
+// registrazione di un nuovo utente
 void signup(){
 
     // dichiaro username e password
@@ -159,7 +164,8 @@ void signup(){
     
 }
 
-// inizializzazione del socket di ascolto
+// inizializzazione del socket di ascolto per ricevere richieste
+// di connessione da altri device 
 int init_listen_socket(int port){
     listener = socket(DOMAIN, SOCK_STREAM, 0);
     if (listener < 0){
@@ -188,7 +194,8 @@ void update_max_socket(int *max, int value){
         *max = value;
 }
 
-void socket_verify(fd_set *m, int l, int *max, struct connection *connections){
+/*
+void wait_for_event(fd_set *m, int l, int *max, struct connection *connections){
     int i, ret, new_fd, addr_len;
     struct sockaddr_in req_addr;
 
@@ -233,62 +240,92 @@ void socket_verify(fd_set *m, int l, int *max, struct connection *connections){
             else {
 
             }
-
         }
+    }
+}
+*/
+/*
+void wait_for_event(struct device_info *info){
+    int i, ret, new_fd, addr_len;
+    struct sockaddr_in req_addr;
 
+    fd_set readers;
+    FD_ZERO(&readers);  
+
+    readers = *(info->master);  
+    ret = select(*(info->fd_max)+1, &readers, NULL, NULL, NULL);
+    if(ret<0){
+        perror("Errore nella select");
+        exit(1);
     }
 
+    // scorro tutti i socket cercando quelli che hanno avuto richieste
+    for(i = 0; i < *(info->fd_max); i++){
+
+        // se il socket i è settato
+        if(FD_ISSET(i, &readers)){
+
+            // LISTENER: verifica se ci sono nuove richieste di connessione
+            if (i == info->listener){
+
+                // memorizzo il socket della richiesta in arrivo
+                new_fd = accept(info->listener, (struct sockaddr *)&req_addr, &addr_len);
+
+                // richiedo l'identificazione
+                // TODO: identify();
+
+                // TODO: aggiungere una connessione al campo connessioni
+
+                FD_SET(new_fd, info->master);
+                slog("Nuova richiesta accettata correttamente su socket: %d", new_fd);
+
+                update_max_socket(info->fd_max, i);
+            }
+ 
+
+            if (i == fileno(stdin)){
+                // gestione input utente
+            }
+
+            // è un messaggio ricevuto da un utente
+            else {
+
+            }
+        }
+    }
 }
+*/
 
+void chat_handler(struct device_info *info){
 
-// protocollo di identificazione tra device
-void identification(){
+    int dest_port = 1235;
+    char dest[16];
 
-}
+    // nome utente da contattare
+    printf("Inserire il nome utente con cui comunicare: ");
+    fflush(stdout);
 
-// manda una richiesta di inizio chat a un device
-void start_chat(char* dest, int port){
+    // aspetto un input
+    // wait_for_msg(info, NULL, -1);
+    scanf("%s", dest);                  // recupero il nome  del destinatario
 
-    // costruisco l'indirizzo del device destinatario
+    // TODO: chiedo al server se l'utente è online
+        // il server mi risponde con la porta, -1 se offline
 
-    // eseguo una connect sulla porta "port"
-
-    // identification() -> gli utenti si identificano secondo il protocollo descritto in identification
-
-    // aggiungo il nuovo socket a master
-
-}
-
-
-
-void chat_handler(char* dest){
-
-    int dest_port;
-
-    // chiedo al server se l'utente è online
-
-    // il server mi risponde con la porta, -1 se offline
-
-    /*if(dest_port == -1){
-
+    if(dest_port == -1){
         // mando una richiesta di "save_history" al server per ogni messaggio digitato
-
     }
     else {
-
-        start_chat(dest, dest_port); 
-
+        start_chat(info, dest, dest_port); 
         // gestisco l'invio di messaggi
     }
     
-    
-    */
-
-
 }
 
+
+// gestisce il menu utente dopo che un utente si è loggato
 void logged(char* username, int port){
-    int answer = 0;
+    int answer = 1;
     int pid;
     int i;
 
@@ -298,25 +335,32 @@ void logged(char* username, int port){
 
     // create user info
     strcpy(usr.username, username);
-
-    DEVICE.user = usr;
+    strcpy(DEVICE.username, username);
+    //DEVICE.username = usr.username;
     DEVICE.port = port;
     DEVICE.socket = listener;
 
     FD_ZERO(&master);    
-    FD_SET(listener, &master);                  // aggiuungo il socket in ascolto dei device
+    FD_SET(listener, &master);                  // aggiungo il socket in ascolto dei device
     FD_SET(sd, &master);                        // aggiungo le risposte dal server in ascolto
     FD_SET(fileno(stdin), &master);             // aggiungo lo stdin in ascolto
 
+    // imposto le informazioni del device
+    info.listener = listener;
+    info.fd_max = &fdmax;
+    info.master = &master;
+    info.username = username;
+    info.port = port;
 
     do{
         printf("\e[1;1H\e[2J");                 // cancella il terminale
         printf(MENU2, username, port);          // mostra il menu delle scelte
         fflush(stdout);                         // mostra in uscita tutto l'ouput
 
-        socket_verify(&master, listener, &fdmax, NULL);
-
-        scanf("%d", &answer);
+        slog("%s in attesa", username);
+        answer = wait_for_msg(&info, NULL, -1);        
+        //scanf("%d", &answer);
+        
         switch (answer){
 
             case 0:
@@ -332,6 +376,8 @@ void logged(char* username, int port){
 
             case 3:
                 // CHAT
+            
+                chat_handler(&info);
                 break;
         
         default:

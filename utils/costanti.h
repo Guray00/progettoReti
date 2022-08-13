@@ -1,3 +1,19 @@
+#ifndef COSTANTI_H    /* This is an "include guard" */
+#define COSTANTI_H 
+
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <stdlib.h>
+#include <time.h>
+#include <signal.h>
+#include <termios.h>
+
+
 #define DEBUG               1
 
 #define DOMAIN              AF_INET
@@ -17,7 +33,17 @@ struct user {
 };
 
 struct connection {
-    struct user user;
+    char username[16];
     int port;
     int socket;
 };
+
+struct device_info{
+    char* username;
+    int port;
+    fd_set *master; 
+    int *fd_max;
+    int listener;  
+};
+
+#endif /* CHAT_H */
