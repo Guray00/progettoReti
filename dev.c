@@ -2,7 +2,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <string.h> 
+#include <string.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
@@ -31,8 +31,8 @@ const char MENU2[] =
     "2) show\n"
     "3) chat\n"
     "4) share\n"
-    "5) out\n\n"
-    "Selezionare quale operazione compiere: ";
+    "5) out\n\n";
+    //"Selezionare quale operazione compiere: ";
 
 const char ADDRESS[] = "127.0.0.1";
 // ==========================================
@@ -64,14 +64,14 @@ void intHandler() {
 
     slog("In chiusura  per SIGINT %s:%d, max socket: %d", DEVICE.username, DEVICE.port, fdmax);
 
-    close(sd);
-    slog("==> chiuso socket %d", sd);
+    //close(sd);
+    //slog("==> chiuso socket %d", sd);
   
     // vengono chiusi tutti i socket in uso dal device
-    for (i = 0; i <= fdmax; i++){
-        close(i);
+    /*for (i = 0; i <= fdmax; i++){
         slog("==> chiuso socket %d", i);
-    }
+        close(i);
+    }*/
 
     exit(0);
 }
@@ -188,11 +188,14 @@ int init_listen_socket(int port){
     return listener;
 }
 
+
+/*
 // funzione di utility per aggiornare il valore massimo
 void update_max_socket(int *max, int value){
     if(value  > *max)
         *max = value;
 }
+*/
 
 /*
 void wait_for_event(fd_set *m, int l, int *max, struct connection *connections){
@@ -298,16 +301,17 @@ void wait_for_event(struct device_info *info){
 
 void chat_handler(struct device_info *info){
 
-    int dest_port = 1235;
-    char dest[16];
+    int dest_port = 1235;               // porta del dispositivo da raggiungere
+    char dest[16];                      // nome del dispositivo da raggiungere
 
     // nome utente da contattare
     printf("Inserire il nome utente con cui comunicare: ");
     fflush(stdout);
 
     // aspetto un input
-    // wait_for_msg(info, NULL, -1);
+    wait_for_msg(info, NULL, -1);
     scanf("%s", dest);                  // recupero il nome  del destinatario
+    fflush(stdin);
 
     // TODO: chiedo al server se l'utente è online
         // il server mi risponde con la porta, -1 se offline
@@ -328,6 +332,7 @@ void logged(char* username, int port){
     int answer = 1;
     int pid;
     int i;
+    int ret = -1;
 
     struct user usr;
 
@@ -352,14 +357,17 @@ void logged(char* username, int port){
     info.username = username;
     info.port = port;
 
+    printf("\e[1;1H\e[2J");                 // cancella il terminale
+    printf(MENU2, username, port);          // mostra il menu delle scelte
+    fflush(stdout);                         // mostra in uscita tutto l'ouput
+    
     do{
-        printf("\e[1;1H\e[2J");                 // cancella il terminale
-        printf(MENU2, username, port);          // mostra il menu delle scelte
-        fflush(stdout);                         // mostra in uscita tutto l'ouput
+        
+        ret = wait_for_msg(&info, NULL, -1);          // verifico tutte le richieste
+        if(ret != -1) continue;
 
-        slog("%s in attesa", username);
-        answer = wait_for_msg(&info, NULL, -1);        
-        //scanf("%d", &answer);
+        scanf("%d", &answer);                   // prendo in input la scelta del comando
+        fflush(stdin);                          // pulisco l'input
         
         switch (answer){
 
@@ -482,4 +490,4 @@ int main(int argc, char* argv[]){
     
 
     return 0;
-}
+} 

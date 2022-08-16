@@ -44,6 +44,7 @@ struct device_info{
     fd_set *master; 
     int *fd_max;
     int listener;  
+    struct connection *connection;
 };
 
 #endif /* CHAT_H */

@@ -39,8 +39,8 @@ int wait_for_msg(struct device_info *info, char* dest, int sd){
     struct sockaddr_in req_addr;
     socklen_t adl;
 
-    char buffer[10];        // buffer di messaggi da leggere
-    char msg[10];           // contenuto del messaggio
+    char buffer[512];        // buffer di messaggi da leggere
+    char msg[512];           // contenuto del messaggio
     int msg_size = 0;       // dimensione del messaggio
 
 
@@ -49,17 +49,16 @@ int wait_for_msg(struct device_info *info, char* dest, int sd){
     fd_set readers;
     FD_ZERO(&readers);  
 
-    slog("prima della select per %s", info->username);
+    slog("------ [%s in attesa] ------", info->username);
 
     //  seleziono i socket che sono attivi
     readers = *(info->master);  
     ret = select(*(info->fd_max)+1, &readers, NULL, NULL, NULL);
-    if(ret<0){
+    if(ret<=0){
         perror("Errore nella select");
         exit(1);
     }
 
-    slog("progressione di %s su socket %d", info->username, info->listener);
    
     // scorro tutti i socket cercando quelli che hanno avuto richieste
     for(i = 0; i <= *(info->fd_max); i++){
@@ -67,15 +66,13 @@ int wait_for_msg(struct device_info *info, char* dest, int sd){
         // se il socket i è settato
         if(FD_ISSET(i, &readers)){
 
-            //slog("per %s è settato %d", info->username, i);
-
             // LISTENER: verifica se ci sono nuove richieste di connessione da devices
             if (i == info->listener){
                 slog("%s ha individuato una richiesta di connessione su: %d", info->username, i);
 
                 // memorizzo il socket della richiesta in arrivo
                 new_fd = accept(info->listener, (struct sockaddr *)&req_addr, &adl);
-                if(new_fd < 0){
+                if(new_fd <= 0){
                     perror("Impossibile accettare la richiesta");
                     continue;
                 }
@@ -89,6 +86,7 @@ int wait_for_msg(struct device_info *info, char* dest, int sd){
                 slog("%s ha accettato correttamente la richiesta, nuovo socket: %d", info->username, new_fd);
 
                 update_max((info->fd_max), new_fd);
+                ret_value = 0;
             }
   
             // verifico se c'è stata una richiesta di input,
@@ -97,32 +95,36 @@ int wait_for_msg(struct device_info *info, char* dest, int sd){
                 // se scrivo un messaggio
 
                 slog("%s ha scritto un messaggio, invierà su: %d", info->username, sd);
+                
+                fgets(msg, 512, stdin);
+                msg_size = strcspn(msg, "\n");
+                msg[msg_size] = 0;
 
-                // creo il messaggio
-                scanf("%s", buffer);
-                sprintf(buffer, "%d %s", msg_size, msg);
+                sprintf(buffer, "%d|%s", msg_size, msg);
+                slog("buffer contiene: %s", buffer);
+                fflush(stdin);
 
                 // lo invio
                 len = send(sd, &buffer, sizeof(buffer), 0);
-                if(len < 0){
+                if(len <= 0){
                     perror("Errore invio messaggio");
-                    continue;
+                    return ret_value;
                 }
 
                 slog("%s ha inviato un messaggio", info->username);
-                FD_CLR(i, info->master);
-                fflush(stdin);
+                ret_value = 0;
             }
 
             else if(i==fileno(stdin) && dest == NULL && sd == -1){
                 // attesa di input, ma per selezione
 
-                scanf("%d", &ret_value);
-                FD_CLR(i, info->master);
-                fflush(stdin);
+                // scanf("%d", &ret_value);
+                // FD_CLR(i, info->master);
+                // fflush(stdin);
 
             }
-
+            
+            /*
             // è un messaggio ricevuto dall'utente con cui sono in chat
             else if (sd != -1 && i == sd && i != fileno(stdin)){
 
@@ -138,24 +140,32 @@ int wait_for_msg(struct device_info *info, char* dest, int sd){
                 printf("[%-10s] %s", dest, msg);
                 fflush(stdout);
             }
+            */
 
-            else if(i != fileno(stdin)){
+            else{
                 slog("%s ha ricevuto un messaggio", info->username);
 
                 // notifica
-                len = recv(i, buffer, sizeof(buffer), 0);
-                if(len < 0){
+                len = recv(i, &buffer, sizeof(buffer), 0);
+                if(len <= 0){
                     perror("errore ricezione");
-                    continue;
+                    return ret_value;
                 }
 
-                sprintf(buffer, "%d %s", msg_size, msg);
+                slog("ricevuto: %s", buffer);
+                sscanf(buffer, "%d|%[^\t\n]", &msg_size, msg);
                 msg[msg_size] = '\0';
 
-                printf("**************************************\n");
-                printf("[%s] %s", dest, msg);
-                printf("\n**************************************\n");
+                slog("msg_size: %d", msg_size);
+                slog(msg);
+
+                printf("\n******************************************\n");
+                printf("[%s] %s", "undefined", msg);
+                printf("\n******************************************\n");
                 fflush(stdout);
+
+
+                ret_value = 0;
             }
         
         }
@@ -172,6 +182,7 @@ void chatting(struct device_info *info, struct connection *con){
 
     do {
         slog("hehehehh sono nel chat");
+        //scanf("%d", &quit);
         wait_for_msg(info, con->username, con->socket);
 
     } while(quit == 0);
@@ -182,10 +193,10 @@ void chatting(struct device_info *info, struct connection *con){
 // manda una richiesta di inizio chat a un device
 void start_chat(struct device_info *info, char* dest, int dest_port){
 
-    struct sockaddr_in destaddr;
-    int new_socket;
-    int ret;
-    struct connection new_con;
+    struct sockaddr_in destaddr;            // indirizzo del dispositivo da contattare
+    int new_socket;                         // socket di connessione con il nuovo dispositivo
+    int ret;                                // variabile di utilità
+    struct connection new_con;              // struttura per il salvataggio della connessione tra devices
 
     // costruisco l'indirizzo del device destinatario
     memset(&destaddr, 0, sizeof(destaddr));
@@ -193,6 +204,7 @@ void start_chat(struct device_info *info, char* dest, int dest_port){
     destaddr.sin_port   = htons(dest_port);
     inet_pton(DOMAIN, "127.0.0.1", &destaddr.sin_addr);
 
+    // creo il socket necessario per instaurare la comunicazione
     new_socket = socket(DOMAIN, SOCK_STREAM, 0);
 
     // eseguo una connect sulla porta "port"
@@ -205,7 +217,7 @@ void start_chat(struct device_info *info, char* dest, int dest_port){
 
     // aggiungo il nuovo socket a master
     FD_SET(new_socket, (info->master));
-    update_max((info->fd_max), new_socket);
+    update_max((info->fd_max), new_socket); // aggiorno il massimo indice di socket
 
     
     slog("Connessione da %s:%d a %s:%d stabilita", info->username, info->port, dest, dest_port);
@@ -219,8 +231,6 @@ void start_chat(struct device_info *info, char* dest, int dest_port){
     new_con.socket = new_socket;
 
     //clear_terminal();
-    //slog("=============");
-    //scanf("%d", NULL);
     chatting(info, &new_con);
 }
 
