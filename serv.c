@@ -89,19 +89,65 @@ int findPort(int argc, char* argv[]){
     return port;
 }
 
+
+int send_request(int dfd, char buffer[MAX_REQUEST_LEN]){
+    int bytes_to_send, sent_bytes;
+    char* buf = buffer;
+
+    slog("Server sending request to %d: %s",dfd, buffer);
+    bytes_to_send = MAX_REQUEST_LEN;
+    while(bytes_to_send > 0) {
+        sent_bytes = send(dfd, (void*) buf, bytes_to_send, 0);
+        if(sent_bytes == -1) {
+            return -1;
+        }
+            
+        bytes_to_send -= sent_bytes;
+        buf += sent_bytes;
+    }
+    
+    return sent_bytes;
+}
+
 // gestisce il segnale di interruzione
 void intHandler() {
-    slog("********** server in chiusura ********");
-    close(sd);
-    slog("==> %d chiuso", sd);
-    close(csd);
-    slog("==> %d chiuso", csd);
+    slog("**************************************");
+    slog("*         server in chiusura         *");
+    slog("**************************************");
+
+    // creo il buffer per la richiesta
+    char buffer[MAX_REQUEST_LEN];
+
+    // creo il codice identificativo
+    short int code = -1;
+
+    // genero la richiesta
+    sprintf(buffer, "%d %s", htons(code), "server");
+
+    // notifico tutti i dispositivi della disconnessione
+    for(i = 0; i <= fd_max; i++){
+
+        // se il file descriptor è attivo
+        if (FD_ISSET(i, &master) && i != sd){
+
+            // invio la richiesta
+            ret = send_request(i, buffer);
+            if(ret > 0){
+
+                // se è andata a buon fine termino l'iesimo socket
+                close(i);
+                slog("==> chiuso socket %d", i);
+            }
+        }
+    }
+   
+    slog("==> chiuso socket %d", sd);
     exit(0);
 }
 
 void pipeHandler() {
-    slog("esco con pipe");
-    exit(0);
+    slog("[PIPE ERROR]");
+   // exit(0);
 }
 
 // **********************************************************************

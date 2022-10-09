@@ -80,8 +80,10 @@ void intHandler() {
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
 
+    // inizializzo il socket di ascolto
     sd  = socket(DOMAIN, SOCK_STREAM, 0);
 
+    // se non è possibile avviare il device, chiudo
     if(sd < 0){
         perror("Errore all'avvio del socket");
         exit(-1);
@@ -99,7 +101,7 @@ int init(const char* addr, int port){
         exit(-1);
     }
 
-    slog("Device (%d) ricevuto (socket non ancora attivo)", port);
+    slog("Device (%d) connesso al server", port);
 }
 
 
@@ -434,12 +436,15 @@ int login(int port){
         perror("Errore send request");
         exit(-1);
     } 
+
     
     ret = recv(sd, (void*) &res_code, sizeof(res_code), 0);
     if(ret < 0){
         perror("Errore ricezione per signup");
         exit(-1);
     }
+
+    slog("anche recv");
 
     res_code = ntohs(res_code);
     slog("ricevuto codice di risposta: %d", res_code);
@@ -453,18 +458,26 @@ int login(int port){
 }
 
 
+/***********************************
+ *              MAIN               *
+***********************************/
 int main(int argc, char* argv[]){
     int answer;
     uint16_t code;
 
+    // inizializza il logger
     init_logger("./.log"); 
     
-    //  assegna la gestione del segnale di int
+    //  assegna la gestione del segnale di interrupt,
+    // in modo da chiudere correttamente il device
     signal(SIGINT, intHandler);
 
     // avvio il socket
     int port = portCheck(argc, argv);
     init(ADDRESS, port);
+
+
+    // gestione parte grafica per gli inserimenti
     printf(MENU);
 
     do {

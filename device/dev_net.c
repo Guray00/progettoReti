@@ -18,12 +18,12 @@
 // ====================
 
 
-// EXTERN ================
-extern int to_child_fd[2];
-extern int to_parent_fd[2];
-extern int pid;
-extern struct connection con;
-// =======================
+// EXTERN ====================
+extern int to_child_fd[2];      // pipe NET->GUI
+extern int to_parent_fd[2];     // pipe GUI->NET
+extern int pid;                 // pid del processo
+extern struct connection con;   // informazioni sulla connessione
+// ===========================
 
 // GLOBAL ===================================================================
 int 
@@ -41,7 +41,7 @@ fd_set master;
 struct sockaddr_in 
     servaddr,               // indirizzo del server
     myaddr,                 // indirizzo del device
-    conectaddr,             // indirizzo del device a cui si manda la richiesta
+    connectaddr,             // indirizzo del device a cui si manda la richiesta
     ndaddr;                 // indirizzo del nuovo device
 
 
@@ -96,7 +96,7 @@ int init_listen_socket(int port){
 }
 
 
-// instaura una connessione con il server
+// MACRO che instaura una connessione con il server
 void init_server_connection(int port){
 
     // inizializzo il socket di ascolto
@@ -157,6 +157,44 @@ void send_server_request(char buffer[MAX_REQUEST_LEN]){
     }
 
     slog("network invia: %s", buffer);
+}
+
+void recive_from_server(char* buffer){
+    int bytes_to_receive, received_bytes;
+    char *buf = buffer;    
+
+
+    bytes_to_receive = MAX_REQUEST_LEN;
+    while(bytes_to_receive > 0) {
+        received_bytes = recv(sd, buf, bytes_to_receive, 0);
+        if(received_bytes == -1) 
+            exit(-1);
+                            
+        bytes_to_receive -= received_bytes;
+        buf += received_bytes;
+    }
+}
+
+
+void server_handler(){
+    char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
+    short int code;                     // codice della richiesta effettuata
+
+    // ricevo dal buffer
+    recive_from_server(buffer);
+    sscanf(buffer, "%hd %s", &code, buffer);
+
+    slog("ricevuto per net %hd e %s", code, buffer);
+
+    switch(code){
+        case -1:
+            slog("arrivata al net chiusura server");
+            printf("\n************* SERVER OFFLINE **************\n\n");
+            fflush(stdout);
+
+            FD_CLR(sd, &master);
+            break;
+    }
 }
 
 
@@ -253,7 +291,7 @@ void startNET(int port){
 
                 // [SERVER-HANDLER] ricezione di informazioni dal server
                 else if ( i == sd){
-                    
+                    server_handler();
                 }
 
                 // [DEVICES-HANDLER] gestione delle richieste di altri dispositivi

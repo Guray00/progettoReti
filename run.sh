@@ -37,9 +37,9 @@ cat <<EOT >> .log
 EOT
 
 
-gnome-terminal --geometry 100x50+2000+100   -x sh -c "tail -F .log"
+gnome-terminal --geometry 100x50+2000+100  -x sh -c "tail -F .log"
 gnome-terminal --geometry 100x30+50+100    -x sh -c "./serv 4242; printf \"\nProcesso terminato, verrà chiuso tra 5 secondi...\"; sleep 5;"
 gnome-terminal --geometry 100x30+50+800    -x sh -c "./dev 1234; printf \"\nProcesso terminato, verrà chiuso tra 5 secondi...\"; sleep 5;"
-gnome-terminal --geometry 100x30+1050+800    -x sh -c "./dev 1235; printf \"\nProcesso terminato, verrà chiuso tra 5 secondi...\"; sleep 5;"
+# gnome-terminal --geometry 100x30+1050+800    -x sh -c "./dev 1235; printf \"\nProcesso terminato, verrà chiuso tra 5 secondi...\"; sleep 5;"
 
 #gnome;-terminal -- ./dev 1234
