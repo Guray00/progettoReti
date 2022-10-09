@@ -15,15 +15,20 @@
 
 
 // CODES ===========================
-#define SIGNUP_CODE 1
-#define LOGIN_CODE  2
-#define CHAT_CODE   4
+#define SIGNUP_CODE         1
+#define LOGIN_CODE          2
+#define CHAT_CODE           4
+
+#define SENDMSG_CODE      100
+
+#define ISONLINE_CODE     200
 // =================================
 
 #define DEBUG               1
 
 #define DOMAIN              AF_INET
 #define MAX_REQUEST_LEN     255
+#define MAX_MSG_SIZE        240
 
 #define MAX_USERNAME_SIZE   16
 #define MAX_PW_SIZE         16
@@ -45,6 +50,8 @@ struct connection {
     char username[MAX_USERNAME_SIZE];
     int port;
     int socket;
+    struct connection *next;
+    struct connection *prev;
 };
 
 struct device_info{

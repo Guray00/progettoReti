@@ -187,6 +187,8 @@ void server_handler(){
     slog("ricevuto per net %hd e %s", code, buffer);
 
     switch(code){
+
+        // DISCONNECT REQUEST
         case -1:
             slog("arrivata al net chiusura server");
             printf("\n************* SERVER OFFLINE **************\n\n");
@@ -225,6 +227,25 @@ void gui_handler(){
             ret = recive_code_from_server();
             break;
         
+        // CHECK ONLINE REQUEST
+        case ISONLINE_CODE:
+            send_server_request(read_buffer);
+            ret = recive_code_from_server();
+            break;
+
+        // SEND MESSAGE REQUEST
+        case SENDMSG_CODE:
+            /*
+                - se ho una connessione con il destinatario:
+                    invio il messaggio al suo socket
+                
+                - altrimenti:
+                    verifico se posso avere una connessione
+                    - se posso averla invio un messaggio direttamente
+                    - altrimenti invio un messaggio al server
+            */
+            break;
+
         // BAD REQUEST
         default:
             ret = -1;

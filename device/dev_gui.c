@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <termios.h>
 #include <ctype.h>
+#include <sys/ioctl.h>
 
 #include "./dev_gui.h"
 #include "../utils/costanti.h"
@@ -124,9 +125,92 @@ int login_limit(){
     return 0;
 }
 
-// main per la gui
+// stampa una riga di asterischi
+void print_separation_line(){
+    struct winsize w;
+    int i;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+    for(i = 0; i < w.ws_col; i++)
+        printf("*");
+    
+    printf("\n");
+}
+
+// stampa centralmente il testo
+void print_centered(char* txt){
+    int size, len, i;
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+    len = strlen(txt);
+    size = (w.ws_col - len)/2;
+    
+    for (i = 0; i < size; i++) printf(" ");
+    printf("%s", txt);
+    for (i = 0; i < size; i++) printf(" ");
+    printf("\n");
+}
+
+// verifica se un utente è online
+int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
+    char buffer[MAX_REQUEST_LEN];
+    int ret;
+
+    // genero la richiesta
+    sprintf(buffer, "%hd %s", ISONLINE_CODE, usr);
+    ret = send_request_to_net(buffer);    
+    return ret;
+}
+
+
+// stampa la cronologia di un utente
+int print_historic(char src[MAX_USERNAME_SIZE], char dst[MAX_USERNAME_SIZE]){
+    FILE *file;
+    char c;
+    char path[500];
+    char command[500];
+
+    // creo i file se non esistono
+    sprintf(path, "./devices_data/%s/%s.txt", src, dst);
+    sprintf(command, "mkdir -p ./devices_data/%s/ && touch %s", src, path);
+    system(command);
+    
+    slog(path);
+    file = fopen(path, "r");
+    if(!file) {
+        perror("Errore caricamento cronologia");
+        return -1;
+    }
+
+    // stampo tutta la cronologia
+    c = fgetc(file);
+    while(c != EOF){
+        printf("%c", c);
+        c = fgetc(file);
+    }
+    
+    fclose(file);
+    return 0;
+}
+
+void printChatHeader(char *dest){
+    char header[100];
+
+    system("clear");
+    print_separation_line(); // ***
+    sprintf(header, "Chat con %s", dest);
+    print_centered(header);
+    print_separation_line(); // ***
+    printf("\n");
+}
+
+
+
+// MAIN DELLA GUI
 void startGUI(){    
         short int ret;  
+
 
         // Stampa il menu delle scelte
         if (!STATUS)
@@ -136,7 +220,11 @@ void startGUI(){
         do {
             char command[15], user[SIZE], pw[SIZE];
             char msg[MAX_REQUEST_LEN]; int msg_size;
+            int status;
+            FILE *historic;
+            char path[500];
 
+            // chiede l'inserimento di un comando
             scanf("%s", command);
 
             switch(command_to_code(command)){
@@ -161,9 +249,13 @@ void startGUI(){
                     // informazioni e stampo il nuovo meno per le richieste
                     if (ret == 1) {
                         STATUS = ONLINE;
+
+                        // setup della connessione
                         strcpy(con.username, user);                     // copio il nome
+
                         printf("Utente connesso correttamente!\n");     // mostro a schermo login riuscito
                         fflush(stdout);
+                        
                         sleep(1);                                       // aspetto un secondo
                         system("clear");                                // pulisco la shell
                         printf(MENU2, con.username, con.port);          // mostro il nuovo menu
@@ -188,68 +280,73 @@ void startGUI(){
                         break;
                     }
 
-                    // TODO: controllo sulla validità del nome
+                    // TODO: controllare se il nome è in rubrica e corretto
 
-                    // mostro a schermo con chi stiamo parlando
-                    system("clear");
-                    printf("**************************\n");
-                    printf("chat con: %s\n", user);
-                    printf("**************************\n\n");
+                    status = checkUserOnline(user);        
 
-                    /* TO-DO 
-                        - download msgs
-                        - show msgs
-                        - scanf
-                        - dopo che ho premuto invio, il messaggio passa al
-                          backend che si occupa di:
-                            - verificare se l'utente è online:
-                                - se è online, lo recapita personalmente
-                                - se offline, lo inoltra al server
-                    */
-                    
-                    //check_usr_exists()
-                    //download_msgs();
+                    // mostra la parte superiore della chat
+                    printChatHeader(user);
+
+                    // mostra a schermo la cronologia e ne consente l'aggiornamento
+                    print_historic(con.username, user);
+                    sprintf(path, "./devices_data/%s/%s.txt", con.username, user);
+                    historic = fopen(path, "a");
 
                     // prende l'input dell'utente
                     do  {
 
-                        fgets(msg, 512, stdin);                        
+                        // crea l'inzio dell'output di ogni messaggio
+                        char formatted_msg[MAX_MSG_SIZE] = "";
+                        char source[MAX_USERNAME_SIZE + 2] = "[";        
+                        strcat(source, con.username);
+                        strcat(source, "]");
+
+                        // prende in input il messaggio
+                        fgets(msg, MAX_MSG_SIZE, stdin);                        
                         msg_size = strcspn(msg, "\n");
                         msg[msg_size] = 0;
+
 
                         // se il contenuto non è vuoto mando
                         // il messaggio al mittente
                         if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0){
-                            slog("[TO SEND] %s", msg);                        
+
+                            // cancello la riga precendente (messaggio scritto dall'utente)
+                            printf("\033[A\r\33[2K");   
+
+                            // costtruisco il messaggio formattato
+                            sprintf(formatted_msg, "\033[0;35m%-10s\033[0m %s\033[0;32m [*", source, msg);
+                            if (status == 1) 
+                                strcat(formatted_msg, "*]\033[0m\n");
+                            else 
+                                strcat(formatted_msg, " ]\033[0m\n");
+
+                            // mostro il messaggio formattato
+                            // send_msg();  // invia al network la richiesta di invio messaggio, 
+                                            // e risponde segnalando se è stato recapitato direttamente o al server
+
+                            printf(formatted_msg);                  // stampa a schermo
+                            fprintf(historic, formatted_msg);       // salva nella cronologia
+                            fflush(stdout);                         // forzo l'output
                         }
 
                     } while(strcmp(msg, "\\q") != 0);
 
-                    system("clear");
-                    printf(MENU2, con.username, con.port);
-
+                    // riporta al menu principale
+                    fclose(historic);   // chiudo il file della cronologia
+                    system("clear");    // pulisco la schermata
+                    printf(MENU2, con.username, con.port);  // stampo il vecchio menu
                     break;
 
+                // scelta errata
                 default:
                     printf("Scelta scorretta, reinserire: ");
+                    fflush(stdin);
                     break;
             }
 
         } while (1); //  ciclo fino a quando non è corretta
         
+        // programma terminato, chiusura della pipe di comunicazione
         close(to_parent_fd[1]);
 }
-
-    /*
-        char phrase[SIZE];
-
-        while(1){
-            printf("\n\nplease type a sentence: ");
-            scanf("%s", phrase);
-            write(to_parent_fd[1], phrase, strlen(phrase) + 1);
-
-            // aspetto la risposta
-            read(to_child_fd[0], phrase, SIZE);
-            printf("GUI[%d] riceve: %s", getpid(), phrase);
-            fflush(stdout);
-        }*/

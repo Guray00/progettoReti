@@ -212,9 +212,6 @@ int find_entry_register(struct user u) {
         }
     }
 
-    u.port = -1;
-    u.logout_timestamp = -1;
-    u.login_timestamp  = -1;
     fclose(file);
     return 0;
 }
@@ -365,12 +362,55 @@ void newConnection(){
 }
 
 
+
+/*  1: utente online
+    0: utente offline
+   -1: utente non trovato   */
+short int isOnline(char username[MAX_USERNAME_SIZE]){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE];
+    int res = -1;
+    
+    char logout[255];
+    char p[255];
+
+    file = fopen(FILE_REGISTER, "r");
+
+    if(!file) {
+        perror("Errore apertura file registro");
+        return -1;
+    }
+
+    /*while(fscanf(file, "%s | %d", usr, p) != EOF) {
+        
+    }*/
+
+    
+    while(fscanf(file, "%s | %s | %s | %s", &usr, &p, NULL, &logout) != EOF) {
+
+        if(strcmp(usr, username) == 0) {
+            // se è != 0 significa che non è online
+            if (logout != 0)
+                res = 0;
+            else
+                res = 1;
+
+            break;
+        }
+    }
+
+    fclose(file);
+    return res;
+}
+
+
 int main(int argc, char* argv[]){
 
     // variabili di utility
     char buffer[MAX_REQUEST_LEN];
     struct user usr;
 
+    
     //  assegna la gestione del segnale di int
     signal(SIGINT, intHandler);
     signal(SIGPIPE, pipeHandler);
@@ -381,6 +421,10 @@ int main(int argc, char* argv[]){
 
     // utilizzato per debug
     init_logger("./.log");
+
+    slog("*********************************");
+    slog("> server started on port: %d", port);
+    slog("*********************************");    
 
     // impostazioni inziali del socket
     init(ADDRESS, port);
@@ -464,7 +508,6 @@ int main(int argc, char* argv[]){
 
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
-
                             break;
                         
                         // LOGIN
@@ -479,6 +522,12 @@ int main(int argc, char* argv[]){
 
                             ret = login(usr, port);
 
+                            response = htons(ret);
+                            send(i, (void*) &response, sizeof(uint16_t), 0);
+                            break;
+
+                        case ISONLINE_CODE:
+                            ret = isOnline(buffer);
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
                             break;

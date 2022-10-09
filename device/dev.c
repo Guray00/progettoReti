@@ -39,6 +39,10 @@ int main(int argc, char* argv[])
     // recupera la porta sulla quale si comunica
     int port = portCheck(argc, argv);
     con.port = port;
+    con.prev = NULL;
+    con.next = NULL;
+
+    // inizializzo il logger
     init_logger("./.log");
 
 
