@@ -126,11 +126,11 @@ void intHandler() {
     char buffer[MAX_REQUEST_LEN];
 
     // creo il codice identificativo
-    short int code = -1;
+    short int code = LOGOUT_CODE;
     struct connection *p;
 
     // genero la richiesta
-    sprintf(buffer, "%d %s", htons(code), "server");
+    sprintf(buffer, "%d %s", code, "server");
 
     // notifico tutti i dispositivi della disconnessione
     /*
@@ -150,19 +150,21 @@ void intHandler() {
         }
     }*/
 
-    
+    // per ogni device connesso notifico la disconnesione
     for (p = con.next; p!=NULL; ){
 
-        // invio la richiesta
+        // invio la richiesta di disconnessione
         slog("mando richiesta disconnesione su socket %d", p->socket);
         ret = send_request(p->socket, buffer);
         if(ret > 0){
             slog("==> chiuso socket %d", p->socket);
 
-             // se è andata a buon fine termino l'iesimo socket
+            // se è andata a buon fine termino l'iesimo socket
+            // e rimuovo dalla struttura dati la connessione
             p = close_connection(p);
-            }
+        }
     }
+
 
     exit(0);
 }
@@ -358,6 +360,9 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
 
 
 int login(int sock, struct user usr, int port){
+
+    // TODO: verificare che l'utente non sia già connesso
+
     int flag = auth(usr);
 
     if (flag){
@@ -394,6 +399,7 @@ void newConnection(){
 
 
 
+
 /*  1: utente online
     0: utente offline
    -1: utente non trovato   */
@@ -427,6 +433,83 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
 
     fclose(file);
     return res;
+}
+
+
+void update_hanging_file(char* dst, char* src){
+    FILE *file, *tmp;               // file utilizzati
+    char command[500];               // comando costruito per rinominare il file
+    char cmd2[500];               // comando costruito per rinominare il file
+    char path[100], tmp_path[100];
+
+    char usr[MAX_USERNAME_SIZE];    // nome letto dal registro
+    char timestamp[50];
+
+    
+    sprintf(path,     "./server_data/%s/%s", dst, HANGING_FILE);
+    sprintf(tmp_path, "./server_data/%s/%s", dst, TMP_FILE);
+    sprintf(cmd2, "touch ./server_data/%s/%s", dst, HANGING_FILE);
+    
+    // apro i file
+    system(cmd2);
+    file = fopen(path,     "r");                // apro il file
+    tmp  = fopen(tmp_path, "w");
+
+    // se uno dei due file non si apre, termino
+    if(!file || !tmp) {
+        perror("Errore apertura file per hanging");
+        return;
+    }
+
+    
+    // per ogni riga letta dal registro la copio nel file temporaneo
+    while(fscanf(file, "%s %s", &timestamp, &usr) != EOF) {
+        
+        // se non è la riga che cerco la riscrivo
+        if(strcmp(usr, src) != 0) {
+            fprintf(tmp, "%s %s\n", &timestamp, &usr);
+        }
+
+    }
+
+    // scrivo sempre l'ultimo utente  alla fine
+    fprintf(tmp, "%lu %s\n", (unsigned long) time(NULL), src);
+    
+    // chiudo i file
+    fclose(file);
+    fclose(tmp);
+
+    // costruisco il comando per il renaming
+    sprintf(command, "rm %s && mv %s %s", path, tmp_path, path);
+    slog("%s", command);
+    system(command);
+}
+
+// scrive un messaggio pendente per un destinatario
+void write_pendant(char* src, char* dst, char* msg){
+    FILE *file;
+    char path[500];
+    char command[500];
+
+    // creo i file se non esistono
+    // msg from A to B pending in: server_data/B/A.txt
+    sprintf(path, "./server_data/%s/%s.txt", dst, src);
+    sprintf(command, "mkdir -p ./server_data/%s/ && touch %s", dst, path);
+    system(command);
+    
+    file = fopen(path, "a");
+    if(!file) {
+        perror("Errore caricamento cronologia");
+        return;
+    }
+
+    fprintf(file, "%s\n", msg);
+    
+    // chiudo il file e termino
+    fclose(file);
+
+    // aggiorno il file per hanging
+    update_hanging_file(dst, src);
 }
 
 
@@ -500,7 +583,9 @@ int main(int argc, char* argv[]){
                     int bytes_to_receive, received_bytes;
                     char *args;       
                     short int response;
-                    char *buf = buffer;    
+                    char *buf = buffer;   
+                    char msg[MAX_MSG_SIZE];
+                    char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; 
 
 
                     bytes_to_receive = sizeof(buffer);
@@ -516,19 +601,21 @@ int main(int argc, char* argv[]){
                     }
 
 
-                    sscanf(buffer, "%hd %s", &code, &buffer);
+                    sscanf(buffer, "%hd %[^\n\t]", &code, &buffer);
                     slog("server ricevuto richiesta [%hd]", code);
 
                     switch(code){
 
                         // DISCONNECT
-                        case -1:
+                        case LOGOUT_CODE:
                             slog("[SOCKET %d] Device chiuso", i);
                             updateRegister(usr.username, port, 0, (unsigned long) time(NULL)); // segno il logout del device
-                            //close(i);
-                            //close_connection(&con);
+
+                            // rimuovo dalla lista la connessione i-esima
                             close_connection_by_socket(&con, i);
 
+                            // rimuovo la connessione dai 
+                            // socket ascoltati
                             FD_CLR(i, &master);
                             break;
 
@@ -592,6 +679,17 @@ int main(int argc, char* argv[]){
 
                             //strcpy(buffer, get_username_by_connection(&con, i));
                             slog("[SERVER->NET (%d)]: mandato %d", i, ret);
+                            break;
+                        
+                        case PENDANTMSG_CODE:
+                            // ricavo il destinatario e il messaggio inviato
+                            sscanf(buffer, "%s %[^\n\t]", dst, msg);
+
+                            // recupero il mittente del messaggio analizzando le connessioni
+                            strcpy(src, get_username_by_connection(&con, i));
+
+                            slog("pendant from %s to %s", src, dst);
+                            write_pendant(src, dst, msg);
                             break;
                     }   
                 }

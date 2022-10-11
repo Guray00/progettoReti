@@ -18,6 +18,8 @@
 #define SIGNUP_CODE         1
 #define LOGIN_CODE          2
 #define CHAT_CODE           4
+#define LOGOUT_CODE        10
+
 
 #define SENDMSG_CODE      100
 #define CREATECON_CODE    101
@@ -30,13 +32,18 @@
 
 #define DOMAIN              AF_INET
 #define MAX_REQUEST_LEN     255
-#define MAX_MSG_SIZE        240
 
 #define MAX_USERNAME_SIZE   16
 #define MAX_PW_SIZE         16
+                                                                        //          - SPACING - INT (CODE)
+#define MAX_MSG_SIZE        MAX_REQUEST_LEN - MAX_USERNAME_SIZE - MAX_USERNAME_SIZE - 2       - 4
+ 
+
 #define FILE_REGISTER       "registro.txt"
 #define FILE_USERS          "utenti.txt"
 #define TMP_FILE_REGISTER   "tmp.txt"
+#define TMP_FILE            "tmp.txt"
+#define HANGING_FILE        "hanging.txt"
 
 #define PORT_NOT_KNOWN       0000
 

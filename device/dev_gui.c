@@ -29,7 +29,7 @@ extern struct connection con;
 // ========================
 
 // memorizza lo status di loggato o meno
-short unsigned int STATUS = 0;
+short unsigned int STATUS = OFFLINE;
 
 // menu per un utente non collegato
 const char MENU[] = 
@@ -71,7 +71,7 @@ int command_to_code(char command[10]){
         return 6;
     
     else if (strcmp(command, "out")     == 0)
-        return 7;
+        return LOGOUT_CODE;
     
     return -1;
 }
@@ -104,6 +104,19 @@ int send_login_request(char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
     return ret;
 }
 
+// effettua una richiesta di logout
+int send_logout_request(){
+    
+    char buffer[MAX_REQUEST_LEN];
+    int ret;
+
+    // genero la richiesta
+    sprintf(buffer, "%hd", LOGOUT_CODE);
+    ret = send_request_to_net(buffer);
+    
+    return ret;
+}
+
 // effettua una richiesta di login
 int send_signup_request(char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
     
@@ -119,7 +132,6 @@ int send_signup_request(char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
 
 int login_limit(){
     if (STATUS != ONLINE) {
-        printf("Questa funzione è disponibile solo se colllegati.\n\n");
         return 1;
     }
 
@@ -206,7 +218,7 @@ void printChatHeader(char *dest){
     printf("\n");
 }
 
-void send_msg(char *dst, char *msg){
+void send_msg_to_net(char *dst, char *msg){
     char buffer[MAX_REQUEST_LEN];
     
     sprintf(buffer, "%d %s %s", SENDMSG_CODE, dst, msg);
@@ -222,8 +234,7 @@ void startGUI(){
 
 
         // Stampa il menu delle scelte
-        if (!STATUS)
-            printf(MENU);
+        printf(MENU);
 
         
         do {
@@ -240,6 +251,13 @@ void startGUI(){
 
                 case SIGNUP_CODE:
                     scanf("%s %s", user, pw);
+
+                    // per iscriversi bisogna non essere collegati!
+                    if(!login_limit()) {
+                        printf("Questa funzione è disponibile solo se non collegati.\n\n");
+                        break;
+                    }
+
                     ret = send_signup_request(user, pw);
 
                     if(ret == 1){
@@ -252,6 +270,14 @@ void startGUI(){
 
                 case LOGIN_CODE:
                     scanf("%s %s", user, pw);
+
+                    // per fare il login bisogna non essere collegati!
+                    if(!login_limit()) {
+                        printf("Questa funzione è disponibile solo se non collegati.\n\n");
+                        break;
+                    }
+
+                    // invio della richiesta di login al server
                     ret = send_login_request(user, pw);
                     
                     // se il login è andato a buon fine, salvo le
@@ -269,10 +295,9 @@ void startGUI(){
                         system("clear");                                // pulisco la shell
                         printf(MENU2, con.username, con.port);          // mostro il nuovo menu
                     }
-
-                    else {
+                    else 
                         printf("Credenziali errate, login non effettuato.\n\n");
-                    }
+                    
 
                     break;
                 
@@ -281,7 +306,10 @@ void startGUI(){
                     scanf("%s", user);
 
                     // blocco il comando se non si è online
-                    if(login_limit()) break;
+                    if(login_limit()) {
+                        printf("Questa funzione è disponibile solo se collegati.\n\n");
+                        break;
+                    }   
 
                     // controllo che l'utente non tenti di parlare con se stesso
                     if (strcmp(user, con.username) == 0){
@@ -330,7 +358,7 @@ void startGUI(){
                             else 
                                 strcat(formatted_msg, " ]\033[0m\n");
 
-                            send_msg(user, msg);     // invia al network la richiesta di invio messaggio, 
+                            send_msg_to_net(user, msg);     // invia al network la richiesta di invio messaggio, 
                                                      // e risponde segnalando se è stato recapitato direttamente o al server
 
                             // mostro il messaggio formattato
@@ -347,6 +375,18 @@ void startGUI(){
                     printf(MENU2, con.username, con.port);  // stampo il vecchio menu
                     break;
 
+                case LOGOUT_CODE:
+                    STATUS = OFFLINE;
+
+                    // TODO: verificare il corretto funzionamento
+                    send_logout_request();
+
+                    // stampo il menu iniziale
+                    system("clear");
+                    printf(MENU);
+                    fflush(stdout);
+                    break;
+
                 // scelta errata
                 default:
                     printf("Scelta scorretta, reinserire: ");
@@ -354,7 +394,7 @@ void startGUI(){
                     break;
             }
 
-        } while (1); //  ciclo fino a quando non è corretta
+        } while (1);
         
         // programma terminato, chiusura della pipe di comunicazione
         close(to_parent_fd[1]);

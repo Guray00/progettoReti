@@ -50,6 +50,28 @@ struct sockaddr_in
 const char ADDRESS[] = "127.0.0.1";
 // ===========================================================================
 
+void logout_devices(){
+    struct connection *p, *next;
+    char buffer[MAX_REQUEST_LEN];
+
+    // la testa non deve essere eliminata
+    for (p = con.next; p != NULL; p = next){
+
+        // salvo il puntatore al prossimo elemento
+        next = p->next;
+
+        // genero la richiesta
+        sprintf(buffer, "%d %s", LOGOUT_CODE, con.username);
+
+        // invio la richiesta al device
+        ret = send(p->socket, (void *) buffer, sizeof(buffer), 0);
+        if(ret > 0){
+
+            // se è andata a buon fine termino
+            close_connection(&con);
+        }   
+    }
+}
 
 // gestione chiusura
 void intHandler() {
@@ -59,19 +81,20 @@ void intHandler() {
     char buffer[MAX_REQUEST_LEN];
 
     // creo il codice identificativo
-    short int code = -1;
+    short int code = LOGOUT_CODE;
 
-    // genero la richiesta
-    sprintf(buffer, "%d %s", htons(code), con.username);
-
-    // invio la richiesta
+    // genero la richiesta di disconnessione dal server
+    sprintf(buffer, "%d %s", code, con.username);
     ret = send(sd, (void *) buffer, sizeof(buffer), 0);
     if(ret > 0){
         // se è andata a buon fine termino
-        close(sd);
+        //close(sd);
+        close_connection_by_socket(&con, sd);
         slog("==> chiuso socket %d", sd);
         exit(0);
     }
+
+    logout_devices();
 }
 
 int init_listen_socket(int port){
@@ -185,6 +208,27 @@ void recive_from_server(char buffer[MAX_REQUEST_LEN]){
     }
 }
 
+// MACRO per la ricezione di richieste dal server
+void recive_from_device(char buffer[MAX_REQUEST_LEN], int fd){
+    memset(buffer, 0, MAX_REQUEST_LEN); // resetto il contenuto del buffer
+    
+    int bytes_to_receive, received_bytes;
+    char *buf = buffer;    
+
+
+    bytes_to_receive = MAX_REQUEST_LEN;
+    while(bytes_to_receive > 0) {
+        received_bytes = recv(fd, buf, bytes_to_receive, 0);
+        if(received_bytes == -1){
+            perror("errore ricezione da server per network");
+            exit(-1);
+        }
+                            
+        bytes_to_receive -= received_bytes;
+        buf += received_bytes;
+    }
+}
+
 
 void server_handler(){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
@@ -199,7 +243,7 @@ void server_handler(){
     switch(code){
 
         // DISCONNECT REQUEST
-        case -1:
+        case LOGOUT_CODE:
             slog("arrivata al net chiusura server");
             printf("\n************* SERVER OFFLINE **************\n\n");
             fflush(stdout);
@@ -209,26 +253,61 @@ void server_handler(){
     }
 }
 
+void device_handler(int device){
+    char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
+    short int code;                     // codice della richiesta effettuata
+
+    // ricevo dal buffer
+    recive_from_device(buffer, device);
+    sscanf(buffer, "%hd %s", &code, buffer);
+
+    slog("ricevuto per net DA DEVICE %hd e %s", code, buffer);
+
+    switch(code){
+
+        // DISCONNECT REQUEST
+        case LOGOUT_CODE:
+            slog("arrivata al net chiusura device");
+            fflush(stdout);
+
+            close_connection_by_socket(&con, device);
+            FD_CLR(device, &master);
+            break;
+    }
+}
+
 
 // stabilisce una connessione con un destinatario se non presente
 struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
-    char buffer[MAX_REQUEST_LEN];
-    int response;
-    char address[50];
-    int dest_port;
-    int fd;
-    struct sockaddr_in addr; 
+    char buffer[MAX_REQUEST_LEN];   // buffer per le richieste
+    int response;                   // salva il codice di risposta della richiesta
+    char address[50];               // salva l'indirizzo in cui trovare il device
+    int dest_port;                  // porta in cui contattare il device
+    int fd;                         // file descriptor
+    struct sockaddr_in addr;        // indirizzo della futura connessione
+    struct connection* newcon;      // puntatore alla connessione creata
 
-    // mando ACK per l'utente dst
+    // TEST CONNECTION (già verificato prima!)
+    // se l'utente è già connesso non devo interrogare il server,
+    // bensì provare a comunicarci e vedere se il messaggio arriva.
+    // Se arriva si procede normalente, in caso contrario è necessario
+    // interrogare il server.
+    // - per recuperare le informazione se la connessione non esiste e stabilirla
+    // - inoltrare direttamente le informazioni
+
+
+    // mando una richiesta di informazioni sullo stato dell'utente
     sprintf(buffer, "%d %s", CREATECON_CODE, dst);
     send_server_request(buffer);
     slog("[NET->SERVER]: %s", buffer);
 
 
-    //ret = recive_code_from_server();
+    // FIRST CONNECTION - di seguito si esegue la prima connessione
+    // recupero le informazioni sull'utente con cui voglio
+    // stabilire una connessione e le traduco in:
+    // [RISPOSTA INDIRIZZO PORTA], dove risposta stabilisce se l'utente 
+    // non esiste(-1), offline(0),  online(1)
     recive_from_server(buffer);
-
-    // traduco il buffer ricevuto in [CODICE INDIRIZZO PORTA]
     sscanf(buffer, "%d %s %d", &response, address, &dest_port);
     
     // TODO: testare la corretta ricezione dei dati
@@ -258,11 +337,21 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
             exit(-1);
         }
 
+        // la connessione tra i device è avvenuta,
+        // aggiungo alla lista delle connessioni
+        slog("connessione tra i device avvenuta");
+        newcon = new_connection(&con, fd);
+        strcpy(newcon->username, dst);  // necessario, new_connection non salva il nome per compatibilità
+
     }
 
     // il dispositivo non è online
     else if (response == 0){
-        slog("da mandare al server");
+        slog("utente attualmente offline, connessione non stabilita");
+    }
+
+    else {
+        slog("Utente non esistente, connessione non stabilita");
     }
     
     return NULL;
@@ -274,11 +363,16 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
 // quando l'untente farà l'accesso
 void send_pendant_to_server(char dst[MAX_USERNAME_SIZE], char msg[MAX_MSG_SIZE]){
     //short int code = PENDANTMSG_CODE;
+
+    char buffer[MAX_REQUEST_LEN];
+
+    sprintf(buffer, "%d %s %s", PENDANTMSG_CODE, dst, msg);
+    send_server_request(buffer);
 }
 
 
 // consente l'invio di un messaggio
-void send_msg_to_server(char* buffer){
+void send_msg(char* buffer){
     char dst[MAX_USERNAME_SIZE];
     char msg[MAX_MSG_SIZE];
     struct connection* dst_connection;
@@ -286,12 +380,15 @@ void send_msg_to_server(char* buffer){
     // ricavo il messaggio e il destinatario
     sscanf(buffer, "%s %[^\n\t]", dst, msg);
     
+    // verifico se esiste una connessione precedente con il device
     dst_connection = find_connection(&con, dst);
     
     // se non trovo nessuna connessione
     if(dst_connection == NULL){
 
         // chiedo di instaurare una connessione con l'utente
+        // l'utente potrebbe però essere offline (prima o verificato
+        // se la connessione esisteva, non se può essere creata) 
         dst_connection = create_connection(dst);
 
         // se ancora non è stato possibile realizzarla,
@@ -302,6 +399,8 @@ void send_msg_to_server(char* buffer){
     }
     
 }
+
+
 
 
 void gui_handler(){
@@ -338,7 +437,7 @@ void gui_handler(){
 
         // SEND MESSAGE REQUEST
         case SENDMSG_CODE:
-            send_msg_to_server(buffer);
+            send_msg(buffer);
             ret = 0; // non significativo attualmente
 
             // cerca tra le connessioni attive se è 
@@ -354,6 +453,11 @@ void gui_handler(){
                     - se posso averla invio un messaggio direttamente
                     - altrimenti invio un messaggio al server
             */
+            break;
+
+        case LOGOUT_CODE:
+            slog("[NET] ricevuto richiesta di disconnessione");
+            logout_devices();
             break;
 
         // BAD REQUEST
@@ -427,7 +531,7 @@ void startNET(int port){
 
                 // [DEVICES-HANDLER] gestione delle richieste di altri dispositivi
                 else {
-
+                    device_handler(i);
                 }
             }
         }

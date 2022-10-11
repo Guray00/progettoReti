@@ -3,11 +3,23 @@
 #include "costanti.h"
 #include "connection.h"
 
+/*
+CONNECTION - Struttura dati
 
-struct connection* find_connection(struct connection *con, char dst[MAX_USERNAME_SIZE]){
+La seguente è una struttura dati utilizzata dal server e dai devices
+per tenere traccia di tutte le connessione attualmente attive.
+
+La testa della lista è sempre il dispositivo stesso con le proprie informazioni.
+Tale scelta è stata effettuata per mantenere in modo consistente le informazioni
+prime dei devices e semplificare i casi limiti di estrazione in testa (che in questa 
+modalità non avvengono, essendo il device sempre attivo fin quando funziona).
+*/
+
+// restituisce un puntatore relativo a un utente passato mediante username
+struct connection* find_connection(struct connection *head, char dst[MAX_USERNAME_SIZE]){
     struct connection *p;
 
-    for (p = con; p != NULL; p = p->next){
+    for (p = head; p != NULL; p = p->next){
 
         // se trovo un utente con lo stesso nome 
         // mi sono già connesso in passato, verifico
@@ -20,6 +32,8 @@ struct connection* find_connection(struct connection *con, char dst[MAX_USERNAME
     return NULL;
 }
 
+// consente la chiusura di una connessione paddando il puntatore
+// alla connessione attuale
 struct connection* close_connection(struct connection *con){
     struct connection* next;
 
