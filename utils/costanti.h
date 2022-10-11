@@ -20,6 +20,8 @@
 #define CHAT_CODE           4
 
 #define SENDMSG_CODE      100
+#define CREATECON_CODE    101
+#define PENDANTMSG_CODE   102
 
 #define ISONLINE_CODE     200
 // =================================
@@ -46,13 +48,7 @@ struct user {
     long unsigned int logout_timestamp;
 };
 
-struct connection {
-    char username[MAX_USERNAME_SIZE];
-    int port;
-    int socket;
-    struct connection *next;
-    struct connection *prev;
-};
+
 
 struct device_info{
     char* username;

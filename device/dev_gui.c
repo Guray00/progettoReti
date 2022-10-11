@@ -14,6 +14,7 @@
 
 #include "./dev_gui.h"
 #include "../utils/costanti.h"
+#include "../utils/connection.h"
 #include "../API/logger.h"
 
 #define SIZE 10
@@ -176,7 +177,6 @@ int print_historic(char src[MAX_USERNAME_SIZE], char dst[MAX_USERNAME_SIZE]){
     sprintf(command, "mkdir -p ./devices_data/%s/ && touch %s", src, path);
     system(command);
     
-    slog(path);
     file = fopen(path, "r");
     if(!file) {
         perror("Errore caricamento cronologia");
@@ -190,6 +190,7 @@ int print_historic(char src[MAX_USERNAME_SIZE], char dst[MAX_USERNAME_SIZE]){
         c = fgetc(file);
     }
     
+    // chiudo il file e termino
     fclose(file);
     return 0;
 }
@@ -203,6 +204,14 @@ void printChatHeader(char *dest){
     print_centered(header);
     print_separation_line(); // ***
     printf("\n");
+}
+
+void send_msg(char *dst, char *msg){
+    char buffer[MAX_REQUEST_LEN];
+    
+    sprintf(buffer, "%d %s %s", SENDMSG_CODE, dst, msg);
+    slog("[GUI->NET]: %s", buffer);
+    send_request_to_net(buffer);
 }
 
 
@@ -321,10 +330,10 @@ void startGUI(){
                             else 
                                 strcat(formatted_msg, " ]\033[0m\n");
 
-                            // mostro il messaggio formattato
-                            // send_msg();  // invia al network la richiesta di invio messaggio, 
-                                            // e risponde segnalando se è stato recapitato direttamente o al server
+                            send_msg(user, msg);     // invia al network la richiesta di invio messaggio, 
+                                                     // e risponde segnalando se è stato recapitato direttamente o al server
 
+                            // mostro il messaggio formattato
                             printf(formatted_msg);                  // stampa a schermo
                             fprintf(historic, formatted_msg);       // salva nella cronologia
                             fflush(stdout);                         // forzo l'output

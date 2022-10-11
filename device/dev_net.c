@@ -14,6 +14,7 @@
 // ====================
 #include "./dev_net.h"
 #include "../utils/costanti.h"
+#include "../utils/connection.h"
 #include "../API/logger.h"
 // ====================
 
@@ -40,9 +41,9 @@ fd_set master;
 // indirizzi
 struct sockaddr_in 
     servaddr,               // indirizzo del server
-    myaddr,                 // indirizzo del device
-    connectaddr,             // indirizzo del device a cui si manda la richiesta
-    ndaddr;                 // indirizzo del nuovo device
+    myaddr;                 // indirizzo del device
+    //connectaddr,             // indirizzo del device a cui si manda la richiesta
+    //ndaddr;                 // indirizzo del nuovo device
 
 
 // LOCALHOST
@@ -79,6 +80,9 @@ int init_listen_socket(int port){
         perror("Errore apertura socket");
         exit(-1);
     }
+
+    // imposto il socket di ascolto
+    con.socket = listener;
 
     // salvo il mio indirizzo per ricevere le richieste
     memset(&myaddr, 0, sizeof(myaddr)); // pulizia
@@ -149,17 +153,21 @@ void send_server_request(char buffer[MAX_REQUEST_LEN]){
     bytes_to_send = MAX_REQUEST_LEN;
     while(bytes_to_send > 0) {
         sent_bytes = send(sd, (void*) buf, bytes_to_send, 0);
-            if(sent_bytes == -1) 
+            if(sent_bytes == -1){
+                perror("errore invio");
                 exit(-1);
+            } 
             
             bytes_to_send -= sent_bytes;
             buf += sent_bytes;
     }
 
-    slog("network invia: %s", buffer);
 }
 
-void recive_from_server(char* buffer){
+// MACRO per la ricezione di richieste dal server
+void recive_from_server(char buffer[MAX_REQUEST_LEN]){
+    memset(buffer, 0, MAX_REQUEST_LEN); // resetto il contenuto del buffer
+    
     int bytes_to_receive, received_bytes;
     char *buf = buffer;    
 
@@ -167,8 +175,10 @@ void recive_from_server(char* buffer){
     bytes_to_receive = MAX_REQUEST_LEN;
     while(bytes_to_receive > 0) {
         received_bytes = recv(sd, buf, bytes_to_receive, 0);
-        if(received_bytes == -1) 
+        if(received_bytes == -1){
+            perror("errore ricezione da server per network");
             exit(-1);
+        }
                             
         bytes_to_receive -= received_bytes;
         buf += received_bytes;
@@ -200,6 +210,99 @@ void server_handler(){
 }
 
 
+// stabilisce una connessione con un destinatario se non presente
+struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
+    char buffer[MAX_REQUEST_LEN];
+    int response;
+    char address[50];
+    int dest_port;
+    int fd;
+    struct sockaddr_in addr; 
+
+    // mando ACK per l'utente dst
+    sprintf(buffer, "%d %s", CREATECON_CODE, dst);
+    send_server_request(buffer);
+    slog("[NET->SERVER]: %s", buffer);
+
+
+    //ret = recive_code_from_server();
+    recive_from_server(buffer);
+
+    // traduco il buffer ricevuto in [CODICE INDIRIZZO PORTA]
+    sscanf(buffer, "%d %s %d", &response, address, &dest_port);
+    
+    // TODO: testare la corretta ricezione dei dati
+    if (response > 0){
+        slog("risposta positiva: %d, %s, %d", response, address, dest_port);
+
+        // inizializzo il socket per comunicare con il nuovo dispositivo
+        fd  = socket(DOMAIN, SOCK_STREAM, 0);
+        if(fd < 0){
+            perror("Errore all'avvio del socket");
+            exit(-1);
+        }
+
+        // aggiungo alla lista la nuova connessione
+        new_connection(&con, fd);
+
+        // preparazione indirizzi per raggiungere il server
+        memset(&addr, 0, sizeof(addr)); // pulizia
+        addr.sin_family = DOMAIN;
+        addr.sin_port = htons(4242);
+        inet_pton(DOMAIN, address, &addr.sin_addr);
+
+        // connessione al server
+        ret = connect(fd, (struct sockaddr*) &addr, sizeof(addr));
+        if(ret < 0){
+            perror("Errore nella connect");
+            exit(-1);
+        }
+
+    }
+
+    // il dispositivo non è online
+    else if (response == 0){
+        slog("da mandare al server");
+    }
+    
+    return NULL;
+}
+
+
+// L'utente è stato trovato offline, è dunque necessario aggiungere il
+// messaggio inviato come pendente al server, in modo che venga inviato
+// quando l'untente farà l'accesso
+void send_pendant_to_server(char dst[MAX_USERNAME_SIZE], char msg[MAX_MSG_SIZE]){
+    //short int code = PENDANTMSG_CODE;
+}
+
+
+// consente l'invio di un messaggio
+void send_msg_to_server(char* buffer){
+    char dst[MAX_USERNAME_SIZE];
+    char msg[MAX_MSG_SIZE];
+    struct connection* dst_connection;
+
+    // ricavo il messaggio e il destinatario
+    sscanf(buffer, "%s %[^\n\t]", dst, msg);
+    
+    dst_connection = find_connection(&con, dst);
+    
+    // se non trovo nessuna connessione
+    if(dst_connection == NULL){
+
+        // chiedo di instaurare una connessione con l'utente
+        dst_connection = create_connection(dst);
+
+        // se ancora non è stato possibile realizzarla,
+        // allora l'utente è offline
+        if (dst_connection == NULL){
+            send_pendant_to_server(dst, msg);
+        }
+    }
+    
+}
+
 
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
@@ -209,7 +312,7 @@ void gui_handler(){
 
     // recupero il tipo di richiesta in base al codice
     len = read(to_parent_fd[0], read_buffer, MAX_REQUEST_LEN);
-    sscanf(read_buffer, "%hd %s", &code, buffer);
+    sscanf(read_buffer, "%hd %[^\t\n]", &code, buffer);
 
     // verifico le richieste ricevute dalla gui
     switch (code){
@@ -235,6 +338,13 @@ void gui_handler(){
 
         // SEND MESSAGE REQUEST
         case SENDMSG_CODE:
+            send_msg_to_server(buffer);
+            ret = 0; // non significativo attualmente
+
+            // cerca tra le connessioni attive se è 
+            // già presente il destinatario
+            
+
             /*
                 - se ho una connessione con il destinatario:
                     invio il messaggio al suo socket

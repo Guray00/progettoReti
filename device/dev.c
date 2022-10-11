@@ -15,6 +15,7 @@
 #include "dev_net.h"
 #include "../API/logger.h"
 #include "../utils/costanti.h"
+#include "../utils/connection.h"
 
 #define SIZE 15
 

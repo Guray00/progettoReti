@@ -11,6 +11,7 @@
 
 #include "./API/logger.h"
 #include "./utils/costanti.h"
+#include "./utils/connection.h"
 #include "./source/register.h"
 
 // dichiarazione variabili ======================
@@ -36,6 +37,11 @@
     fd_set 
         master,         // tutti i socket 
         readers;        // socket disponibili
+
+
+// utile per mantenere le informazioni
+// sulle connessioni in corso
+struct connection con;
 
 // ==============================================
 
@@ -90,15 +96,16 @@ int findPort(int argc, char* argv[]){
 }
 
 
+// manda una richiesta e risponde con il numero di byte inviati
 int send_request(int dfd, char buffer[MAX_REQUEST_LEN]){
     int bytes_to_send, sent_bytes;
     char* buf = buffer;
 
-    slog("Server sending request to %d: %s",dfd, buffer);
     bytes_to_send = MAX_REQUEST_LEN;
     while(bytes_to_send > 0) {
         sent_bytes = send(dfd, (void*) buf, bytes_to_send, 0);
         if(sent_bytes == -1) {
+            perror("errore invio richiesta server");
             return -1;
         }
             
@@ -120,11 +127,13 @@ void intHandler() {
 
     // creo il codice identificativo
     short int code = -1;
+    struct connection *p;
 
     // genero la richiesta
     sprintf(buffer, "%d %s", htons(code), "server");
 
     // notifico tutti i dispositivi della disconnessione
+    /*
     for(i = 0; i <= fd_max; i++){
 
         // se il file descriptor è attivo
@@ -139,9 +148,22 @@ void intHandler() {
                 slog("==> chiuso socket %d", i);
             }
         }
+    }*/
+
+    
+    for (p = con.next; p!=NULL; ){
+
+        // invio la richiesta
+        slog("mando richiesta disconnesione su socket %d", p->socket);
+        ret = send_request(p->socket, buffer);
+        if(ret > 0){
+            slog("==> chiuso socket %d", p->socket);
+
+             // se è andata a buon fine termino l'iesimo socket
+            p = close_connection(p);
+            }
     }
-   
-    slog("==> chiuso socket %d", sd);
+
     exit(0);
 }
 
@@ -335,13 +357,17 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
 }
 
 
-int login(struct user usr, int port){
+int login(int sock, struct user usr, int port){
     int flag = auth(usr);
 
     if (flag){
+        struct connection *tmp, *tail;
         // aggiornare il registro degli accessi con il timestamp attuale di login
         // e 0 per segnalare che siamo ancora connessi
         updateRegister(usr.username, port, (unsigned long) time(NULL), 0);
+
+        // imposta l'username alla connessione
+        set_connection(&con, usr.username, sock);        
     }
 
     return flag;
@@ -349,6 +375,7 @@ int login(struct user usr, int port){
 
 // gestisce la richiesta di nuova connessione di un dispositivo
 void newConnection(){
+
     // accetto richiesta e salvo l'informazione nel socket csd
     csd = accept(sd, (struct sockaddr*) &clientaddr, &len);
     if(csd < 0){
@@ -356,9 +383,13 @@ void newConnection(){
         return;
     }
 
-    slog("connessione accettata");
+
+    slog("Il server ha accettato la connessione");
     FD_SET(csd, &master);
     if(csd > fd_max) fd_max = csd;  // avanzo il socket di id massimo, fd_max contiene il max fd
+    
+    // aggiungo la connessione alla lista
+    new_connection(&con, csd);
 }
 
 
@@ -381,11 +412,6 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
         return -1;
     }
 
-    /*while(fscanf(file, "%s | %d", usr, p) != EOF) {
-        
-    }*/
-
-    
     while(fscanf(file, "%s | %s | %s | %s", &usr, &p, NULL, &logout) != EOF) {
 
         if(strcmp(usr, username) == 0) {
@@ -393,7 +419,7 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
             if (logout != 0)
                 res = 0;
             else
-                res = 1;
+                res = atoi(p);
 
             break;
         }
@@ -436,15 +462,20 @@ int main(int argc, char* argv[]){
     FD_ZERO(&readers);                  // pulisco i readers
     FD_SET(sd, &master);                // aggiungo il socket di ricezione tra quelli monitorati
     if(sd > fd_max) fd_max = sd;
-    //FD_SET(fileno(stdin), &master);     // controllo l'input dell'utente
-    //if(fileno(stdin) > fd_max) fd_max = fileno(stdin);
+
+    // inizializzo la lista di connessioni
+    con.socket = sd;
+    con.prev = NULL;
+    con.next = NULL;
+    strcpy(con.username, "server");
+    con.port = port;
 
     while(1){
 
         FD_ZERO(&readers);  // pulisco i lettori
         readers = master;   // copio i socket nei readers
 
-        slog("server in attesa, con sd=%d ed fd_max=%d", sd, fd_max);
+        slog("--- [server in attesa, sd=%d ed fd_max=%d] ---", sd, fd_max);
         ret = select(fd_max+1, &readers, NULL, NULL, NULL);   // seleziono i socket effettivamente attivi
         if(ret < 0){
             perror("Errore nella select");
@@ -475,8 +506,10 @@ int main(int argc, char* argv[]){
                     bytes_to_receive = sizeof(buffer);
                     while(bytes_to_receive > 0) {
                         received_bytes = recv(i, buf, bytes_to_receive, 0);
-                        if(received_bytes == -1) 
+                        if(received_bytes == -1){
+                            perror("errore ricezione richiesta per server");
                             exit(-1);
+                        }
                             
                         bytes_to_receive -= received_bytes;
                         buf += received_bytes;
@@ -492,7 +525,10 @@ int main(int argc, char* argv[]){
                         case -1:
                             slog("[SOCKET %d] Device chiuso", i);
                             updateRegister(usr.username, port, 0, (unsigned long) time(NULL)); // segno il logout del device
-                            close(i);
+                            //close(i);
+                            //close_connection(&con);
+                            close_connection_by_socket(&con, i);
+
                             FD_CLR(i, &master);
                             break;
 
@@ -504,8 +540,6 @@ int main(int argc, char* argv[]){
                             strcpy(usr.pw, args);
 
                             ret = signup(usr);
-                            slog("risultato server: %d", ret);
-
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
                             break;
@@ -520,7 +554,7 @@ int main(int argc, char* argv[]){
                             args = strtok(NULL, "|");
                             port = atoi(args);
 
-                            ret = login(usr, port);
+                            ret = login(i, usr, port);
 
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
@@ -530,6 +564,34 @@ int main(int argc, char* argv[]){
                             ret = isOnline(buffer);
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
+                            break;
+
+                        case CREATECON_CODE:
+                            /* devo rispondere con le informazioni
+                                -1: utente non esistente
+                                 0: utente non attualmente raggiungibile
+                                 1: utente raggiunto e invio di credenziali 
+                            */
+
+                            
+                            ret = 0;//isOnline(buffer);
+                            memset(buffer, 0, sizeof(buffer));
+
+                            // se il dispositivo è raggiungibile
+                            if (ret > 0){
+                                sprintf(buffer, "%d %s %d", ret, ADDRESS, port);
+                            }
+                            // se non è raggiungibile
+                            else {
+                                sprintf(buffer, "%d", ret);
+                            }
+
+
+
+                            ret = send_request(i, buffer);
+
+                            //strcpy(buffer, get_username_by_connection(&con, i));
+                            slog("[SERVER->NET (%d)]: mandato %d", i, ret);
                             break;
                     }   
                 }
