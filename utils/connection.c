@@ -37,12 +37,13 @@ struct connection* find_connection(struct connection *head, char dst[MAX_USERNAM
 struct connection* close_connection(struct connection *con){
     struct connection* next;
 
-    // elimino la connessione dalla lista
-    next = con->next;
-    con->prev->next = con->next;
-
     // chiudo la connessione
     close(con->socket);
+
+    // elimino la connessione dalla lista
+    next = con->next;
+    if(next) next->prev = con->prev;       
+    (con->prev)->next = con->next;
 
     // libero la memoria
     free(con);
@@ -60,41 +61,42 @@ struct connection* close_connection_by_socket(struct connection *head, int sock)
 
         // quando trovo la connessione con il socket desiderato
         if (tmp->socket == sock){
-            // elimino la connessione dalla lista
-            next = tmp->next;
-            tmp->prev->next = tmp->next;
 
             // chiudo la connessione
             close(tmp->socket);
+
+            // elimino la connessione dalla lista
+            next = tmp->next;
+            if(next) next->prev = tmp->prev;       
+            (tmp->prev)->next = tmp->next;
 
             // libero la memoria
             free(tmp);
             return next;
         }
 
-        tmp = tmp->next;
+        tmp  = tmp->next;
     }
 
-    
     // se non trovo la connessione restituisco NULL
     return NULL;
 }
 
 
-struct connection* new_connection(struct connection* con, int sock){
+struct connection* new_connection(struct connection* head, int sock){
     struct connection *tmp, *tail;
 
     tmp = (void*) malloc(sizeof(struct connection));
-    //strcpy(tmp->username, dst);
     tmp->socket = sock;
 
-    tail = con;
+    tail = head;
     while(tail->next != NULL) tail = tail->next;
 
     tail->next = tmp;
     tmp->prev = tail;
-    strcpy(tmp->username, "undefined");
+    tmp->next = NULL;
 
+    strcpy(tmp->username, "undefined");
     return tmp;
 }
 
@@ -131,4 +133,15 @@ char* get_username_by_connection(struct connection* head, int sock){
     }
 
     return NULL;
+}
+
+void print_connection(struct connection* head){
+
+    struct connection* tmp;
+    for(tmp = head->next; tmp != NULL; tmp = tmp->next){
+        printf("[%s(%d)]->", tmp->username, tmp->socket);
+    }
+
+    printf("[NULL]\n\n");
+    fflush(stdout);
 }

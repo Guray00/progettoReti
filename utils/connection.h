@@ -23,4 +23,6 @@ void set_connection(struct connection* head, char username[MAX_USERNAME_SIZE], i
 
 char* get_username_by_connection(struct connection* con, int sock);
 
+void print_connection(struct connection* con);
+
 #endif
