@@ -13,7 +13,6 @@
 #include "./API/logger.h"
 #include "./utils/costanti.h"
 #include "./utils/connection.h"
-#include "./source/register.h"
 
 // dichiarazione variabili ======================
 
@@ -438,14 +437,14 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
 
 
 void update_hanging_file(char* dst, char* src){
-    FILE *file, *tmp;               // file utilizzati
-    char command[500];               // comando costruito per rinominare il file
-    char cmd2[500];               // comando costruito per rinominare il file
-    char path[100], tmp_path[100];
+    FILE *file, *tmp;                   // file utilizzati
+    char command[500];                  // comando costruito per rinominare il file
+    char cmd2[500];                     // comando costruito per rinominare il file
+    char path[100], tmp_path[100];      // per memorizzare i path dei file
 
-    char usr[MAX_USERNAME_SIZE];    // nome letto dal registro
-    unsigned long timestamp;
-    int  n, nuser;
+    char usr[MAX_USERNAME_SIZE];        // username letto dal file
+    unsigned long timestamp;            // timestamp letto dal file
+    int  n, nuser;                      // numero di messaggi letti
 
     
     sprintf(path,     "./server_data/%s/%s", dst, HANGING_FILE);
