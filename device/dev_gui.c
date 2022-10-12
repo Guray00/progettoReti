@@ -71,11 +71,17 @@ void print_centered(char* txt){
     printf("\n");
 }
 
-void print_menu(){
+// mostra l'HEADER per una nuova schermata
+void print_header(char* header){
+    system("clear");
     print_separation_line();
-    print_centered("MENU PRINCIPALE");
+    print_centered(header);
     print_separation_line();
     printf("\n");
+}
+
+void print_menu(){
+    print_header("MENU PRINCIPALE");
     printf(MENU);
     fflush(stdout);
 }
@@ -83,16 +89,14 @@ void print_menu(){
 void print_logged_menu(char* username, int port){
     char buffer[100];
 
-    print_separation_line();
     sprintf(buffer, "Bentornato utente %s:%d", username, port);
-    print_centered(buffer);
-    print_separation_line();
-    printf("\n");
+    print_header(buffer);
     printf(MENU2);
     fflush(stdout);
 }
 
-int command_to_code(char command[10]){
+// converte un comando ricevuto in un codice
+int command_to_code(char *command){
     if (strcmp(command, "signup") == 0)
         return SIGNUP_CODE;
 
@@ -103,7 +107,7 @@ int command_to_code(char command[10]){
         return HANGING_CODE;
     
     else if (strcmp(command, "show")    == 0)
-        return 5;
+        return SHOW_CODE;
     
     else if (strcmp(command, "chat")    == 0)
         return CHAT_CODE;
@@ -197,18 +201,19 @@ int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
 }
 
 
-// stampa la cronologia di un utente
+// stampa la cronologia della chat di un utente
 int print_historic(char src[MAX_USERNAME_SIZE], char dst[MAX_USERNAME_SIZE]){
-    FILE *file;
-    char c;
-    char path[500];
-    char command[500];
+    FILE *file;             // apre il file da cui leggere la cronologia
+    char c;                 // utilizzato per leggere un byte dalla chat
+    char path[500];         // utilizzato per salvare il path del file
+    char command[500];      // utilizzato per inviare al sistema il comando
 
     // creo i file se non esistono
     sprintf(path, "./devices_data/%s/%s.txt", src, dst);
     sprintf(command, "mkdir -p ./devices_data/%s/ && touch %s", src, path);
     system(command);
     
+    // apro il file in lettura
     file = fopen(path, "r");
     if(!file) {
         perror("Errore caricamento cronologia");
@@ -227,12 +232,13 @@ int print_historic(char src[MAX_USERNAME_SIZE], char dst[MAX_USERNAME_SIZE]){
     return 0;
 }
 
+
 void printChatHeader(char *dest){
     char header[100];
 
     system("clear");
     print_separation_line(); // ***
-    sprintf(header, "Chat con %s", dest);
+    sprintf(header, "CHAT con %s", dest);
     print_centered(header);
     print_separation_line(); // ***
     printf("\n");
@@ -265,40 +271,134 @@ void hanging(){
     sprintf(buffer, "%d", HANGING_CODE);
     send_request_to_net(buffer);
 
-    system("clear");
-    print_separation_line();
-    print_centered("HANGING");
-    print_separation_line();
-    printf("\n");
+    // mostra a schermo l'header del hanging
+    print_header("HANGING");
 
-    // stampo il file
+    // recupero il path del file
     sprintf(path, "./devices_data/%s/%s", con.username, HANGING_FILE);
     file = fopen(path, "r");
 
+    // mostro a schermo il parsing del contenuto del file
     while(fscanf(file, "%lu %s %d", &timestamp, username, &n) != EOF){
+
+        // ricavo la data e l'ora dal timestamp
         rawtime = timestamp;
         ts = *localtime(&rawtime);
-
         strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &ts);
-        printf("[%s] %-*s %d messaggi\n", buffer, MAX_USERNAME_SIZE,username, n);
+
+        // mostro a schermo [TIMESTAMP] [UTENTE] [MESSAGGI]
+        printf("[%s] %-*s %d messaggi", buffer, MAX_USERNAME_SIZE,username, n);
+
+        // stampo la "o" se è arrivato solo un messaggio
+        if(n == 1) 
+            printf("o\n");
+        else 
+            printf("\n");
     }
+
+    // chiudo il file
     fclose(file);
 
     printf("\n\nPremi [INVIO] per tornare indietro: ");
-    
-    fstdin();
-    getchar();
+    fstdin();   // pulisco da eventuali residui
+    getchar();  // aspetto la pressione di "invio"
 
+    // mostro nuovamente a schermo il vecchio menu
     system("clear");
     print_logged_menu(con.username, con.port);
-    fstdin();
+    //fstdin();   // pulisco l'input
 }
+
+
+// consente di formattare un messaggio secondo un determinato
+// standard, in modo da renderlo più gradevole alla vista
+void format_msg(char *formatted_msg, char *source, char* msg){
+    char src [MAX_USERNAME_SIZE + 2] = "[";
+
+    strcat(src, source);
+    strcat(src, "]");
+
+    sprintf(formatted_msg, "\033[0;35m%-10s\033[0m %s", src, msg);
+}
+
+
+// invia una richiesta "show" al network
+void show_request_to_net(char* mittente){
+    char buffer[MAX_USERNAME_SIZE];
+    sprintf(buffer, "%d %s", SHOW_CODE, mittente);
+
+    send_request_to_net(buffer);
+}
+
+void chat_request_to_net(char* mittente){
+    char buffer[MAX_USERNAME_SIZE];
+    sprintf(buffer, "%d %s", CHAT_CODE, mittente);
+
+    send_request_to_net(buffer);
+}
+
+
+// Esecuzione del comando di show della gui
+void show(char *mittente){
+    FILE *file;
+    char header[100];
+    char path[100];
+    char *line = NULL;
+    ssize_t read;
+    size_t l;
+
+    char msg[MAX_REQUEST_LEN] = "";
+
+    // [GUI->NET] genero la richiesta
+    show_request_to_net(mittente);
+
+    // [GUI]
+    sprintf(header, "NUOVI MESSAGGI da %s", mittente);
+    print_header(header);
+
+    // creo il path del file
+    sprintf(path, "./devices_data/%s/%s",     con.username, SHOW_FILE);
+    file     = fopen(path, "r");
+    if(file < 0){
+        perror("errore apertura file");
+        return;
+    }
+
+    // mostro a schermo il parsing del contenuto del file
+    while((read=getline(&line, &l, file)) != -1){
+
+        // mostro a schermo [TIMESTAMP] [UTENTE] [MESSAGGI]
+        format_msg(msg, mittente, line);
+        printf(msg);
+    }
+
+    // chiudo il file
+    fclose(file);
+
+    // aspetto l'input dell'utente per andare avanti
+    printf("\n\nPremi [INVIO] per tornare indietro: ");
+    fstdin();   // pulisco da eventuali residui
+    getchar();  // aspetto la pressione di "invio"
+
+    // mostro nuovamente a schermo il vecchio menu
+    system("clear");
+    print_logged_menu(con.username, con.port);
+}
+
+// stampa il visualizzato in base allo stato che gli viene passato
+void print_view_mark(int status){
+    printf("\033[0;32m [*");
+        if (status == 1) 
+            printf("*]\033[0m\n");
+        else 
+            printf("]\033[0m\n");
+}
+
 
 
 // MAIN DELLA GUI
 void startGUI(){    
         short int ret;  
-
 
         // Stampa il menu delle scelte
         print_menu();
@@ -385,6 +485,9 @@ void startGUI(){
                         break;
                     }
 
+                    // invio al network la richiesta di realizzare una nuova chat
+                    chat_request_to_net(user);
+
                     // TODO: controllare se il nome è in rubrica e corretto
                     status = checkUserOnline(user);        
 
@@ -398,12 +501,7 @@ void startGUI(){
 
                     // prende l'input dell'utente
                     do  {
-
-                        // crea l'inzio dell'output di ogni messaggio
-                        char formatted_msg[MAX_MSG_SIZE] = "";
-                        char source[MAX_USERNAME_SIZE + 2] = "[";        
-                        strcat(source, con.username);
-                        strcat(source, "]");
+                        char formatted_msg[MAX_MSG_SIZE];
 
                         // prende in input il messaggio
                         fgets(msg, MAX_MSG_SIZE, stdin);                        
@@ -419,19 +517,24 @@ void startGUI(){
                             printf("\033[A\r\33[2K");   
 
                             // costtruisco il messaggio formattato
-                            sprintf(formatted_msg, "\033[0;35m%-10s\033[0m %s\033[0;32m [*", source, msg);
-                            if (status == 1) 
-                                strcat(formatted_msg, "*]\033[0m\n");
-                            else 
-                                strcat(formatted_msg, " ]\033[0m\n");
+                            format_msg(formatted_msg, con.username, msg);
+
+                            // aggiungo il messaggio alla cronologia. Lo faccio senza
+                            // salvare [**] in quanto non sarebbero significativi a 
+                            // una prossima lettura, questi infatti verranno calcolati
+                            // ogni volta che si accede alla chat
+                            fprintf(historic, formatted_msg);  
+                            fprintf(historic, "\n");  // deve essere aggiunto newline
+
+                            printf(formatted_msg);                  // stampa a schermo
+                            print_view_mark(status);
+
 
                             send_msg_to_net(user, msg);     // invia al network la richiesta di invio messaggio, 
                                                             // e risponde segnalando se è stato recapitato direttamente o al server
 
                             // mostro il messaggio formattato
-                            printf(formatted_msg);                  // stampa a schermo
-                            fprintf(historic, formatted_msg);       // salva nella cronologia
-                            fflush(stdout);                         // forzo l'output
+                            fflush(stdout);                 // forzo l'output
                         }
 
                     } while(strcmp(msg, "\\q") != 0);
@@ -439,11 +542,34 @@ void startGUI(){
                     // riporta al menu principale
                     fclose(historic);   // chiudo il file della cronologia
                     system("clear");    // pulisco la schermata
-                     print_logged_menu(con.username, con.port);
+                    print_logged_menu(con.username, con.port);
                     break;
 
                 case HANGING_CODE:
+                    if(login_limit()) {
+                        printf("Questa funzione è disponibile solo se collegati.\n\n");
+                        break;
+                    }
+
                     hanging();
+                    break;
+
+                case SHOW_CODE:
+                    // prendo in input il nome dell'utente
+                    scanf("%s", user);
+
+                    if(login_limit()) {
+                        printf("Questa funzione è disponibile solo se collegati.\n\n");
+                        break;
+                    }   
+
+                    // controllo che l'utente non tenti di parlare con se stesso
+                    if (strcmp(user, con.username) == 0){
+                        printf("Non puoi vedere i nuovi messaggi con te stesso!\n\n");
+                        break;
+                    }
+
+                    show(user);
                     break;
 
                 case LOGOUT_CODE:

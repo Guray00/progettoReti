@@ -6,5 +6,7 @@
                      /* of interesting problems.*/
 
 void startGUI();
+void format_msg(char *formatted_msg, char *source, char* msg);
+
 
 #endif /* DEVGUI_H */

@@ -436,7 +436,7 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
 }
 
 
-void update_hanging_file(char* dst, char* src){
+int update_hanging_file(char* dst, char* src){
     FILE *file, *tmp;                   // file utilizzati
     char command[500];                  // comando costruito per rinominare il file
     char cmd2[500];                     // comando costruito per rinominare il file
@@ -445,11 +445,12 @@ void update_hanging_file(char* dst, char* src){
     char usr[MAX_USERNAME_SIZE];        // username letto dal file
     unsigned long timestamp;            // timestamp letto dal file
     int  n, nuser;                      // numero di messaggi letti
+    int total;                          // numer totale di messaggi letti
 
     
-    sprintf(path,     "./server_data/%s/%s", dst, HANGING_FILE);
-    sprintf(tmp_path, "./server_data/%s/%s", dst, TMP_FILE);
-    sprintf(cmd2, "touch ./server_data/%s/%s", dst, HANGING_FILE);
+    sprintf(path,     "./server_data/%s/%s",       dst, HANGING_FILE);
+    sprintf(tmp_path, "./server_data/%s/%s",       dst, TMP_FILE);
+    sprintf(cmd2,     "touch ./server_data/%s/%s", dst, HANGING_FILE);
     
     // apro i file
     system(cmd2);
@@ -459,11 +460,12 @@ void update_hanging_file(char* dst, char* src){
     // se uno dei due file non si apre, termino
     if(!file || !tmp) {
         perror("Errore apertura file per hanging");
-        return;
+        return -1;
     }
 
     // numero di messaggi precedenti pari a zero
     nuser = 0;
+    total = 0;
     
     // per ogni riga letta dal registro la copio nel file temporaneo
     while(fscanf(file, "%lu %s %d", &timestamp, &usr, &n) != EOF) {
@@ -476,6 +478,7 @@ void update_hanging_file(char* dst, char* src){
             nuser = n;
         }
 
+        total++;
     }
 
     // nuovo messaggio, per cui incremento il contatore
@@ -491,6 +494,61 @@ void update_hanging_file(char* dst, char* src){
     // costruisco il comando per il renaming
     sprintf(command, "rm %s && mv %s %s", path, tmp_path, path);
     system(command);
+
+    return total;
+}
+
+// rimuove da dest l'hanging information di source
+int remove_from_hanging_file(char* dst, char* src){
+    FILE *file, *tmp;                   // file utilizzati
+    char command[500];                  // comando costruito per rinominare il file
+    char cmd2[500];                     // comando costruito per rinominare il file
+    char path[100], tmp_path[100];      // per memorizzare i path dei file
+
+    char usr[MAX_USERNAME_SIZE];        // username letto dal file
+    unsigned long timestamp;            // timestamp letto dal file
+    int  n;                             // numero di messaggi letti
+    int total;                          // numer totale di messaggi letti
+
+    
+    sprintf(path,     "./server_data/%s/%s",       dst, HANGING_FILE);
+    sprintf(tmp_path, "./server_data/%s/%s",       dst, TMP_FILE);
+    sprintf(cmd2,     "touch ./server_data/%s/%s", dst, HANGING_FILE);
+    
+    // apro i file
+    system(cmd2);
+    file = fopen(path,     "r");                // apro il file
+    tmp  = fopen(tmp_path, "w");
+
+    // se uno dei due file non si apre, termino
+    if(!file || !tmp) {
+        perror("Errore apertura file per hanging");
+        return -1;
+    }
+
+    // numero di messaggi precedenti pari a zero
+    total = 0;
+    
+    // per ogni riga letta dal registro la copio nel file temporaneo
+    while(fscanf(file, "%lu %s %d", &timestamp, &usr, &n) != EOF) {
+        
+        // se non è la riga che cerco la riscrivo
+        if(strcmp(usr, src) != 0) {
+            fprintf(tmp, "%lu %s %d\n", timestamp, usr, n);
+        }
+
+        total++;
+    }
+    
+    // chiudo i file
+    fclose(file);
+    fclose(tmp);
+
+    // costruisco il comando per il renaming
+    sprintf(command, "rm %s && mv %s %s", path, tmp_path, path);
+    system(command);
+
+    return total;
 }
 
 // scrive un messaggio pendente per un destinatario
@@ -532,6 +590,8 @@ void send_file(char* path, int device){
     strcpy(dirpath, path);    
     dirname(dirpath);
 
+    slog("[SERVER] richiesto file: %s", path);
+
     // mi assicuro dell'esistenza del file generandolo su bisogno
     sprintf(cmd, "mkdir -p %s && touch %s", dirpath, path);   // mi assicuro che il file esista
     system(cmd);
@@ -565,12 +625,12 @@ void send_file(char* path, int device){
         
     // chiudo il file
     fclose(file);
-    slog("[server] ha finito");
+    slog("[SERVER] file inviato");
 }
 
 
 // invia il file di hanging
-void send_hanging(int device){
+void send_hanging(int device){ 
     //FILE *file;
     char usr[MAX_USERNAME_SIZE];
     char path[100];
@@ -600,6 +660,27 @@ void send_hanging(int device){
     sprintf(path, "./server_data/%s/%s", usr, HANGING_FILE);
     send_file(path, device);
 
+}
+
+// invia il file di show
+void send_show(int device, char* mittente){ 
+    char usr[MAX_USERNAME_SIZE];
+    char path[100];
+    char cmd[100];
+    
+    // recupero il nome del file che mi interessa
+    strcpy(usr, get_username_by_connection(&con, device));
+    sprintf(path, "./server_data/%s/%s.txt", usr, mittente);
+
+    // mando il file contenente le informazioni 
+    // sui messaggi pendenenti per l'utente
+    send_file(path, device);
+
+    // ora i messaggi pendenti sono stati recapitati
+    // motivo per cui devono essere rimossi
+    sprintf(cmd, "rm %s", path);
+    system(cmd);
+    remove_from_hanging_file(usr, mittente);
 }
 
 int main(int argc, char* argv[]){
@@ -653,13 +734,12 @@ int main(int argc, char* argv[]){
             perror("Errore nella select");
             exit(1);
         } 
-        slog("SI RIPARTE");
 
         // per ogni socket aggiunto, verifico quali sono attivi
         for(i = 0; i <= fd_max; i++){
 
             if(FD_ISSET(i, &readers)){
-                slog("entro per %d", i);
+                slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
 
                 // verifico se la richiesta è sul socket di accettazione,
                 // dunque se è pendente una nuova richiesta di connessione
@@ -785,6 +865,11 @@ int main(int argc, char* argv[]){
                         case HANGING_CODE:
                             send_hanging(i);
                             break;
+
+                        case SHOW_CODE:
+                            sscanf(buffer, "%s", dst);
+                            send_show(i, dst);
+                            break;
                     }   
                 }
             }
@@ -793,62 +878,3 @@ int main(int argc, char* argv[]){
 
     return 0;
 }
-
-
-// invio effettivo del file
-    // leggo MAX_REQUEST_LEN per volta il contenuto del messaggio
-    /*while( fgets(buffer, MAX_REQUEST_LEN, file) != NULL){
-        
-        //send_request(device, buffer);
-        send(device, c, 1, 0);
-        //slog("mandata una botta: %", buffer);
-    }*/
-
-    // troppo pesante inviarlo così
-    /*
-    do{
-        c   = fgetc(file);
-        ret = send(device, &c, 1, 0);
-        if(ret < 0){
-            perror("errore invio file");
-            exit(-1);
-        }    
-
-    } while(c != EOF);
-    */
-/*
-   while(fgets(buffer, MAX_REQUEST_LEN, file) != NULL) {
-
-        slog("server invia: %s", buffer);
-
-        
-        if (send(device, buffer, sizeof(buffer), 0) == -1) {
-            perror("Error in sending file.");
-            exit(1);
-        }
-
-        send_request(device, buffer);
-
-        bzero(buffer, MAX_REQUEST_LEN);
-    }
-
-    */
-
-
-   /*
-   offset = 0;
-    remain_data = size;
-
-    while (((sent_bytes = sendfile(device, fileno(file), &offset, remain_data)) > 0) && (remain_data > 0)){
-        slog("1. Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
-        remain_data -= sent_bytes;
-        slog("2. Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
-    }
-
-    if (sent_bytes < 0){
-        perror("errore send");
-    }
-
-    slog("sku %d %d", sent_bytes, remain_data);
-
-   */

@@ -93,6 +93,7 @@ struct connection* new_connection(struct connection* con, int sock){
 
     tail->next = tmp;
     tmp->prev = tail;
+    strcpy(tmp->username, "undefined");
 
     return tmp;
 }

@@ -13,6 +13,7 @@
 
 // ====================
 #include "./dev_net.h"
+#include "./dev_gui.h"
 #include "../utils/costanti.h"
 #include "../utils/connection.h"
 #include "../API/logger.h"
@@ -169,6 +170,28 @@ int recive_code_from_server(){
     return res_code;
 }
 
+
+// generalizzazione di una richiesta
+void send_request(int code, int fd, char buffer[MAX_REQUEST_LEN]){
+    int bytes_to_send, sent_bytes;
+    char command [MAX_REQUEST_LEN];
+
+    sprintf(command, "%d %s", code, buffer);
+    char* buf = command;
+
+    bytes_to_send = MAX_REQUEST_LEN;
+    while(bytes_to_send > 0) {
+        sent_bytes = send(fd, (void*) buf, bytes_to_send, 0);
+            if(sent_bytes == -1){
+                perror("errore invio");
+                exit(-1);
+            } 
+            
+            bytes_to_send -= sent_bytes;
+            buf += sent_bytes;
+    }
+}
+
 // MACRO per inviare una richiesta a un server
 void send_server_request(char buffer[MAX_REQUEST_LEN]){
     int bytes_to_send, sent_bytes;
@@ -185,8 +208,9 @@ void send_server_request(char buffer[MAX_REQUEST_LEN]){
             bytes_to_send -= sent_bytes;
             buf += sent_bytes;
     }
-
 }
+
+
 
 // MACRO per la ricezione di richieste dal server
 void recive_from_server(char buffer[MAX_REQUEST_LEN]){
@@ -457,6 +481,56 @@ int hanging_request_server(){
     return 0;
 }
 
+int show_request_server(char *mittente){
+    char path[100];
+    char historic_path[100];
+    FILE  *historic;
+
+    FILE *file;
+    char *line = NULL;
+    ssize_t read;
+    size_t l;
+
+    char msg[MAX_REQUEST_LEN] = "";
+
+
+    // creo le cartelle e i file necessari (in locale) per show
+    sprintf(path, "./devices_data/%s/%s", con.username, SHOW_FILE);
+
+    // mando la richiesta di show [CODE] [USERNAME]
+    send_request(SHOW_CODE, sd, mittente);
+
+    // aspetto di ricevere il file di per show
+    recive_file(sd, path);
+
+    // Il file è stato ricevuto, è compito allora del network aggiornare
+    // in modo sensato i file locali. Devono essere aggiunti i nuovi messaggi
+    // alla cronologia della chat caricata
+    sprintf(historic_path, "./devices_data/%s/%s.txt", con.username, mittente);
+    historic = fopen(historic_path, "a");
+    file     = fopen(path, "r");
+    if(file < 0 || historic < 0){
+        perror("errore apertura file");
+        return -1;
+    }
+
+    // mostro a schermo il parsing del contenuto del file
+    while((read=getline(&line, &l, file)) != -1){
+
+        // formatto il messaggio [TIMESTAMP] [UTENTE] [MESSAGGI]
+        format_msg(msg, mittente, line);
+
+        // aggiungo alla cronologia il messaggio
+        fprintf(historic, msg);
+    }
+
+    // chiudo il file
+    fclose(file);
+    fclose(historic);
+
+    return 0;
+}
+
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
@@ -486,6 +560,13 @@ void gui_handler(){
             send_server_request(read_buffer);
             ret = recive_code_from_server();
             break;
+
+        case CHAT_CODE:
+            // la chat deve sempre controllare per nuovi messaggi
+            ret = show_request_server(buffer);
+
+            
+            break;
         
         // CHECK ONLINE REQUEST
         case ISONLINE_CODE:
@@ -496,25 +577,17 @@ void gui_handler(){
         // SEND MESSAGE REQUEST
         case SENDMSG_CODE:
             send_msg(buffer);
-            ret = 0; // non significativo attualmente
-
-            // cerca tra le connessioni attive se è 
-            // già presente il destinatario
-            
-
-            /*
-                - se ho una connessione con il destinatario:
-                    invio il messaggio al suo socket
-                
-                - altrimenti:
-                    verifico se posso avere una connessione
-                    - se posso averla invio un messaggio direttamente
-                    - altrimenti invio un messaggio al server
-            */
+            ret = 0;
             break;
 
+        // SEND HANGING REQUEST
         case HANGING_CODE:
             ret = hanging_request_server();
+            break;
+
+        // SEND SHOW REQUEST
+        case SHOW_CODE:
+            ret = show_request_server(buffer);
             break;
 
         case LOGOUT_CODE:
@@ -601,45 +674,3 @@ void startNET(int port){
         }
     } while(1);
 }
-
-  /*while(size > 0){
-        recive_from_server(buffer);
-        //recv(sd, buffer, sizeof(char), 0);
-        fputs(buffer, file);
-        size--;
-        memset(buffer, 0, MAX_REQUEST_LEN);
-    }*/
-
-    // scrivo il file per ogni byte ricevuto
-    /*
-    while(size >= 0){
-        ret = recv(sd, &c, 1, 0);
-        if(ret < 0){
-            perror("errore ricezione file");
-            exit(-1);
-        }
-        fputc(c, file);
-        size  = size - 1;
-    }*/
-
-    /*
-    slog("size prima vale: %lu", size);
-    while (size > 0) {
-        
-        recive_from_server(buffer);
-
-        fprintf(file, "%s", buffer);
-        bzero(buffer, MAX_REQUEST_LEN);
-        size--;
-    }*/
-
-/*
-
-slog("prima di iniziare a ricevere, aspetto %d bytes", size);
-    remain_data = size;
-    while ((remain_data > 0) && ((len = recv(sd, buffer, BUFSIZ, 0)) > 0)){
-                fwrite(buffer, sizeof(char), len, file);
-                remain_data -= len;
-                fprintf(stdout, "Receive %d bytes and we hope :- %d bytes\n", len, remain_data);
-        }
-*/

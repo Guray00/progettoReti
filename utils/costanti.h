@@ -19,9 +19,9 @@
 #define LOGIN_CODE          2
 #define CHAT_CODE           4
 #define HANGING_CODE        5
+#define SHOW_CODE           6
 
 #define LOGOUT_CODE        10
-
 
 #define SENDMSG_CODE      100
 #define CREATECON_CODE    101
@@ -46,6 +46,7 @@
 #define TMP_FILE_REGISTER   "tmp.txt"
 #define TMP_FILE            "tmp.txt"
 #define HANGING_FILE        "hanging"
+#define SHOW_FILE           "show"
 
 #define PORT_NOT_KNOWN       0000
 
