@@ -33,23 +33,64 @@ short unsigned int STATUS = OFFLINE;
 
 // menu per un utente non collegato
 const char MENU[] = 
-    "***************************\n"
-    "           MENU            \n"
-    "***************************\n"
     "1) signup\t[usr] [pw]\n"
     "2) in\t\t[usr] [pw]\n\n";
 
 // menu per un utente collegato
 const char MENU2[] = 
-    "***************************\n"
-    "*   Utente: %s:%d         \n"
-    "***************************\n"
     "1) hanging\n"
     "2) show\n"
     "3) chat\n"
     "4) share\n"
     "5) out\n\n";
 
+// stampa una riga di asterischi
+void print_separation_line(){
+    struct winsize w;
+    int i;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+    for(i = 0; i < w.ws_col; i++)
+        printf("*");
+    
+    printf("\n");
+}
+
+// stampa centralmente il testo
+void print_centered(char* txt){
+    int size, len, i;
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+    len = strlen(txt);
+    size = (w.ws_col - len)/2;
+    
+    for (i = 0; i < size; i++) printf(" ");
+    printf("%s", txt);
+    for (i = 0; i < size; i++) printf(" ");
+    printf("\n");
+}
+
+void print_menu(){
+    print_separation_line();
+    print_centered("MENU PRINCIPALE");
+    print_separation_line();
+    printf("\n");
+    printf(MENU);
+    fflush(stdout);
+}
+
+void print_logged_menu(char* username, int port){
+    char buffer[100];
+
+    print_separation_line();
+    sprintf(buffer, "Bentornato utente %s:%d", username, port);
+    print_centered(buffer);
+    print_separation_line();
+    printf("\n");
+    printf(MENU2);
+    fflush(stdout);
+}
 
 int command_to_code(char command[10]){
     if (strcmp(command, "signup") == 0)
@@ -59,7 +100,7 @@ int command_to_code(char command[10]){
         return LOGIN_CODE;
     
     else if (strcmp(command, "hanging") == 0)
-        return 3;
+        return HANGING_CODE;
     
     else if (strcmp(command, "show")    == 0)
         return 5;
@@ -76,6 +117,11 @@ int command_to_code(char command[10]){
     return -1;
 }
 
+// pulisce lo standard input
+void fstdin(){
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
 
 // MACRO  per inviare al network una richiesta
 int send_request_to_net(char* buffer){
@@ -138,32 +184,6 @@ int login_limit(){
     return 0;
 }
 
-// stampa una riga di asterischi
-void print_separation_line(){
-    struct winsize w;
-    int i;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-
-    for(i = 0; i < w.ws_col; i++)
-        printf("*");
-    
-    printf("\n");
-}
-
-// stampa centralmente il testo
-void print_centered(char* txt){
-    int size, len, i;
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-
-    len = strlen(txt);
-    size = (w.ws_col - len)/2;
-    
-    for (i = 0; i < size; i++) printf(" ");
-    printf("%s", txt);
-    for (i = 0; i < size; i++) printf(" ");
-    printf("\n");
-}
 
 // verifica se un utente è online
 int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
@@ -172,7 +192,7 @@ int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
 
     // genero la richiesta
     sprintf(buffer, "%hd %s", ISONLINE_CODE, usr);
-    ret = send_request_to_net(buffer);    
+    ret = send_request_to_net(buffer);
     return ret;
 }
 
@@ -227,6 +247,53 @@ void send_msg_to_net(char *dst, char *msg){
 }
 
 
+// gestisce la richiesta di hanging
+void hanging(){
+    char buffer[MAX_REQUEST_LEN];
+    char path[100];
+    FILE* file;
+
+    char username[MAX_USERNAME_SIZE];
+    unsigned long timestamp;
+    int n;
+    
+    time_t rawtime;
+    struct tm ts;
+
+
+    // GUI -> NET, mando la richiesta di hanging
+    sprintf(buffer, "%d", HANGING_CODE);
+    send_request_to_net(buffer);
+
+    system("clear");
+    print_separation_line();
+    print_centered("HANGING");
+    print_separation_line();
+    printf("\n");
+
+    // stampo il file
+    sprintf(path, "./devices_data/%s/%s", con.username, HANGING_FILE);
+    file = fopen(path, "r");
+
+    while(fscanf(file, "%lu %s %d", &timestamp, username, &n) != EOF){
+        rawtime = timestamp;
+        ts = *localtime(&rawtime);
+
+        strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &ts);
+        printf("[%s] %-*s %d messaggi\n", buffer, MAX_USERNAME_SIZE,username, n);
+    }
+    fclose(file);
+
+    printf("\n\nPremi [INVIO] per tornare indietro: ");
+    
+    fstdin();
+    getchar();
+
+    system("clear");
+    print_logged_menu(con.username, con.port);
+    fstdin();
+}
+
 
 // MAIN DELLA GUI
 void startGUI(){    
@@ -234,7 +301,7 @@ void startGUI(){
 
 
         // Stampa il menu delle scelte
-        printf(MENU);
+        print_menu();
 
         
         do {
@@ -247,6 +314,7 @@ void startGUI(){
             // chiede l'inserimento di un comando
             scanf("%s", command);
 
+            slog("comando: %s", command);
             switch(command_to_code(command)){
 
                 case SIGNUP_CODE:
@@ -293,7 +361,7 @@ void startGUI(){
                         
                         sleep(1);                                       // aspetto un secondo
                         system("clear");                                // pulisco la shell
-                        printf(MENU2, con.username, con.port);          // mostro il nuovo menu
+                        print_logged_menu(con.username, con.port);
                     }
                     else 
                         printf("Credenziali errate, login non effettuato.\n\n");
@@ -318,7 +386,6 @@ void startGUI(){
                     }
 
                     // TODO: controllare se il nome è in rubrica e corretto
-
                     status = checkUserOnline(user);        
 
                     // mostra la parte superiore della chat
@@ -359,7 +426,7 @@ void startGUI(){
                                 strcat(formatted_msg, " ]\033[0m\n");
 
                             send_msg_to_net(user, msg);     // invia al network la richiesta di invio messaggio, 
-                                                     // e risponde segnalando se è stato recapitato direttamente o al server
+                                                            // e risponde segnalando se è stato recapitato direttamente o al server
 
                             // mostro il messaggio formattato
                             printf(formatted_msg);                  // stampa a schermo
@@ -372,7 +439,11 @@ void startGUI(){
                     // riporta al menu principale
                     fclose(historic);   // chiudo il file della cronologia
                     system("clear");    // pulisco la schermata
-                    printf(MENU2, con.username, con.port);  // stampo il vecchio menu
+                     print_logged_menu(con.username, con.port);
+                    break;
+
+                case HANGING_CODE:
+                    hanging();
                     break;
 
                 case LOGOUT_CODE:
@@ -383,14 +454,13 @@ void startGUI(){
 
                     // stampo il menu iniziale
                     system("clear");
-                    printf(MENU);
-                    fflush(stdout);
+                    print_menu();
                     break;
 
                 // scelta errata
                 default:
+                    fstdin();
                     printf("Scelta scorretta, reinserire: ");
-                    fflush(stdin);
                     break;
             }
 

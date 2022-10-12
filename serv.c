@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <signal.h>
+#include <libgen.h>  // utile per dirname e basename
 
 #include "./API/logger.h"
 #include "./utils/costanti.h"
@@ -443,7 +444,8 @@ void update_hanging_file(char* dst, char* src){
     char path[100], tmp_path[100];
 
     char usr[MAX_USERNAME_SIZE];    // nome letto dal registro
-    char timestamp[50];
+    unsigned long timestamp;
+    int  n, nuser;
 
     
     sprintf(path,     "./server_data/%s/%s", dst, HANGING_FILE);
@@ -461,19 +463,27 @@ void update_hanging_file(char* dst, char* src){
         return;
     }
 
+    // numero di messaggi precedenti pari a zero
+    nuser = 0;
     
     // per ogni riga letta dal registro la copio nel file temporaneo
-    while(fscanf(file, "%s %s", &timestamp, &usr) != EOF) {
+    while(fscanf(file, "%lu %s %d", &timestamp, &usr, &n) != EOF) {
         
         // se non è la riga che cerco la riscrivo
         if(strcmp(usr, src) != 0) {
-            fprintf(tmp, "%s %s\n", &timestamp, &usr);
+            fprintf(tmp, "%lu %s %d\n", timestamp, usr, n);
+        } else {
+            // salvo il numero di messaggi precedenti
+            nuser = n;
         }
 
     }
 
+    // nuovo messaggio, per cui incremento il contatore
+    nuser++;
+
     // scrivo sempre l'ultimo utente  alla fine
-    fprintf(tmp, "%lu %s\n", (unsigned long) time(NULL), src);
+    fprintf(tmp, "%lu %s %d\n", (unsigned long) time(NULL), src, nuser);
     
     // chiudo i file
     fclose(file);
@@ -481,7 +491,6 @@ void update_hanging_file(char* dst, char* src){
 
     // costruisco il comando per il renaming
     sprintf(command, "rm %s && mv %s %s", path, tmp_path, path);
-    slog("%s", command);
     system(command);
 }
 
@@ -512,6 +521,87 @@ void write_pendant(char* src, char* dst, char* msg){
     update_hanging_file(dst, src);
 }
 
+void send_file(char* path, int device){
+    FILE *file;
+    char cmd[100];
+    char buffer[MAX_REQUEST_LEN];
+    char c;
+    int size, remain_data, sent_bytes;
+
+    // recupero il path della cartella
+    char dirpath[100];
+    strcpy(dirpath, path);    
+    dirname(dirpath);
+
+    // mi assicuro dell'esistenza del file generandolo su bisogno
+    sprintf(cmd, "mkdir -p %s && touch %s", dirpath, path);   // mi assicuro che il file esista
+    system(cmd);
+    
+    // apro il file
+    file = fopen(path, "r");
+    if(!file) {
+        perror("Errore apertura file per l'invio");
+        return;
+    }
+
+    // calcolo dimensione file
+    fseek(file, 0L, SEEK_END);
+    size = ftell(file);
+
+    // invia il numero di byte al network
+    rewind(file);
+    sprintf(buffer, "%d", size);
+    send_request(device, buffer); 
+
+    
+    do{
+        c   = fgetc(file);
+        ret = send(device, &c, 1, 0);
+        if(ret < 0){
+            perror("errore invio file");
+            exit(-1);
+        }    
+    } while(c != EOF);
+    
+        
+    // chiudo il file
+    fclose(file);
+    slog("[server] ha finito");
+}
+
+
+// invia il file di hanging
+void send_hanging(int device){
+    //FILE *file;
+    char usr[MAX_USERNAME_SIZE];
+    char path[100];
+    //char cmd[100];
+    //char buffer[MAX_REQUEST_LEN];
+
+    /*
+    strcpy(usr, get_username_by_connection(&con, device));
+    sprintf(path, "./server_data/%s/%s", usr, HANGING_FILE);
+    sprintf(cmd, "mkdir -p ./server_data/%s/ && touch ./server_data/%s/%s", usr, usr, HANGING_FILE);   // mi assicuro che il file esista
+    system(cmd);
+    
+    file = fopen(path, "r");
+    if(!file) {
+        perror("Errore file per hanging");
+        return;
+    }
+
+    // leggo MAX_REQUEST_LEN per volta il contenuto del messaggio
+    while(fgets(buffer, MAX_REQUEST_LEN, file) != NULL){
+        send_request(device, buffer);
+    }
+
+    fclose(file);
+    */
+    strcpy(usr, get_username_by_connection(&con, device));
+    sprintf(path, "./server_data/%s/%s", usr, HANGING_FILE);
+    send_file(path, device);
+
+}
 
 int main(int argc, char* argv[]){
 
@@ -564,6 +654,7 @@ int main(int argc, char* argv[]){
             perror("Errore nella select");
             exit(1);
         } 
+        slog("SI RIPARTE");
 
         // per ogni socket aggiunto, verifico quali sono attivi
         for(i = 0; i <= fd_max; i++){
@@ -691,6 +782,10 @@ int main(int argc, char* argv[]){
                             slog("pendant from %s to %s", src, dst);
                             write_pendant(src, dst, msg);
                             break;
+
+                        case HANGING_CODE:
+                            send_hanging(i);
+                            break;
                     }   
                 }
             }
@@ -699,3 +794,62 @@ int main(int argc, char* argv[]){
 
     return 0;
 }
+
+
+// invio effettivo del file
+    // leggo MAX_REQUEST_LEN per volta il contenuto del messaggio
+    /*while( fgets(buffer, MAX_REQUEST_LEN, file) != NULL){
+        
+        //send_request(device, buffer);
+        send(device, c, 1, 0);
+        //slog("mandata una botta: %", buffer);
+    }*/
+
+    // troppo pesante inviarlo così
+    /*
+    do{
+        c   = fgetc(file);
+        ret = send(device, &c, 1, 0);
+        if(ret < 0){
+            perror("errore invio file");
+            exit(-1);
+        }    
+
+    } while(c != EOF);
+    */
+/*
+   while(fgets(buffer, MAX_REQUEST_LEN, file) != NULL) {
+
+        slog("server invia: %s", buffer);
+
+        
+        if (send(device, buffer, sizeof(buffer), 0) == -1) {
+            perror("Error in sending file.");
+            exit(1);
+        }
+
+        send_request(device, buffer);
+
+        bzero(buffer, MAX_REQUEST_LEN);
+    }
+
+    */
+
+
+   /*
+   offset = 0;
+    remain_data = size;
+
+    while (((sent_bytes = sendfile(device, fileno(file), &offset, remain_data)) > 0) && (remain_data > 0)){
+        slog("1. Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
+        remain_data -= sent_bytes;
+        slog("2. Server sent %d bytes from file's data, offset is now : %d and remaining data = %d\n", sent_bytes, offset, remain_data);
+    }
+
+    if (sent_bytes < 0){
+        perror("errore send");
+    }
+
+    slog("sku %d %d", sent_bytes, remain_data);
+
+   */

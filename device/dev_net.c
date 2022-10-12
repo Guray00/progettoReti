@@ -18,6 +18,8 @@
 #include "../API/logger.h"
 // ====================
 
+#include <libgen.h>  // utile per dirname e basename
+
 
 // EXTERN ====================
 extern int to_child_fd[2];      // pipe NET->GUI
@@ -75,7 +77,6 @@ void logout_devices(){
 
 // gestione chiusura
 void intHandler() {
-    //slog("In chiusura  per SIGINT %s:%d, max socket: %d", DEVICE.username, DEVICE.port, fdmax);
 
     // creo il buffer per la richiesta
     char buffer[MAX_REQUEST_LEN];
@@ -397,17 +398,72 @@ void send_msg(char* buffer){
             send_pendant_to_server(dst, msg);
         }
     }
-    
 }
 
+// funzione utilizzata per la ricezione di file
+void recive_file(int fd, char *path){
+    FILE* file;
+    char buffer[MAX_REQUEST_LEN];
+    char dirpath[100];
+    char cmd[100];
+    int size;
+    char c;
 
 
+    strcpy(dirpath, path);    
+    dirname(dirpath);
+    sprintf(cmd, "mkdir -p %s && touch %s", dirpath, path);   // mi assicuro che il file esista
+    system(cmd);
+
+    // fino al termine del file continuo a chiedere
+    file = fopen(path, "w");
+
+    // ricevo il numero di byte che mi verranno inviati
+    recive_from_device(buffer, fd);
+    sscanf(buffer, "%d", &size);
+
+    // =========================
+    while(size >= 0){
+        ret = recv(sd, &c, 1, 0);
+        if(ret < 0){
+            perror("errore ricezione file");
+            exit(-1);
+        }
+
+        size  = size - 1;
+        if (size > -1) fputc(c, file);
+    }
+    // =========================
+
+    // chiudo il file
+    fclose(file);
+}
+
+int hanging_request_server(){
+    char buffer[MAX_REQUEST_LEN];
+    char path[100];
+
+
+    // creo le cartelle e i file necessari (in locale) per l'hanging
+    sprintf(path, "./devices_data/%s/%s", con.username, HANGING_FILE);
+
+
+    // mando la richiesta di hanging
+    sprintf(buffer, "%d", HANGING_CODE);
+    send_server_request(buffer);
+
+    // aspetto di ricevere il file di hanging
+    recive_file(sd, path);
+    return 0;
+}
 
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
     short int code;                     // codice della richiesta effettuata
     char answer[4];                     // codice della risposta
+    char* args;
+
 
     // recupero il tipo di richiesta in base al codice
     len = read(to_parent_fd[0], read_buffer, MAX_REQUEST_LEN);
@@ -425,6 +481,8 @@ void gui_handler(){
         // LOGIN REQUEST
         case LOGIN_CODE:
             sprintf(read_buffer, "%s|%d", read_buffer, con.port);
+            args = strtok(buffer, "|");
+            strcpy(con.username, args);
             send_server_request(read_buffer);
             ret = recive_code_from_server();
             break;
@@ -453,6 +511,10 @@ void gui_handler(){
                     - se posso averla invio un messaggio direttamente
                     - altrimenti invio un messaggio al server
             */
+            break;
+
+        case HANGING_CODE:
+            ret = hanging_request_server();
             break;
 
         case LOGOUT_CODE:
@@ -512,6 +574,8 @@ void startNET(int port){
             exit(1);
         }
 
+        slog("[NET] ripartito");
+
         // per ogni richiesta pendente
         for(i = 0; i <= fdmax; i++){
 
@@ -538,16 +602,44 @@ void startNET(int port){
     } while(1);
 }
 
+  /*while(size > 0){
+        recive_from_server(buffer);
+        //recv(sd, buffer, sizeof(char), 0);
+        fputs(buffer, file);
+        size--;
+        memset(buffer, 0, MAX_REQUEST_LEN);
+    }*/
 
-/*length = read(to_parent_fd[0], message, SIZE);
-                    slog("network riceve: %s", message);
+    // scrivo il file per ogni byte ricevuto
+    /*
+    while(size >= 0){
+        ret = recv(sd, &c, 1, 0);
+        if(ret < 0){
+            perror("errore ricezione file");
+            exit(-1);
+        }
+        fputc(c, file);
+        size  = size - 1;
+    }*/
 
-                    for (j = 0; j < length; j++) {
-                        message[j] = toupper(message[j]);
-                    }
+    /*
+    slog("size prima vale: %lu", size);
+    while (size > 0) {
+        
+        recive_from_server(buffer);
 
-                    slog("network invia: %s", message);
-                    
-                    write(to_child_fd[1], message, strlen(message) + 1);
-                    // close(to_parent_fd[1]);
-                    kill(pid, SIGUSR1);*/
+        fprintf(file, "%s", buffer);
+        bzero(buffer, MAX_REQUEST_LEN);
+        size--;
+    }*/
+
+/*
+
+slog("prima di iniziare a ricevere, aspetto %d bytes", size);
+    remain_data = size;
+    while ((remain_data > 0) && ((len = recv(sd, buffer, BUFSIZ, 0)) > 0)){
+                fwrite(buffer, sizeof(char), len, file);
+                remain_data -= len;
+                fprintf(stdout, "Receive %d bytes and we hope :- %d bytes\n", len, remain_data);
+        }
+*/

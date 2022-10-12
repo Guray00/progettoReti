@@ -104,7 +104,7 @@ void set_connection(struct connection* head, char username[MAX_USERNAME_SIZE], i
 
     tmp = head;
     while(tmp!=NULL){
-        printf("scorro %d", tmp->socket);
+        //printf("scorro %d", tmp->socket);
         if (tmp->socket == socket){
             strcpy(tmp->username, username);
             break;

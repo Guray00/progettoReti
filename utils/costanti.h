@@ -18,6 +18,8 @@
 #define SIGNUP_CODE         1
 #define LOGIN_CODE          2
 #define CHAT_CODE           4
+#define HANGING_CODE        5
+
 #define LOGOUT_CODE        10
 
 
@@ -43,7 +45,7 @@
 #define FILE_USERS          "utenti.txt"
 #define TMP_FILE_REGISTER   "tmp.txt"
 #define TMP_FILE            "tmp.txt"
-#define HANGING_FILE        "hanging.txt"
+#define HANGING_FILE        "hanging"
 
 #define PORT_NOT_KNOWN       0000
 
