@@ -7,6 +7,6 @@
 
 void startGUI();
 void format_msg(char *formatted_msg, char *source, char* msg);
-
+void print_centered(char*);
 
 #endif /* DEVGUI_H */

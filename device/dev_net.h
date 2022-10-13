@@ -5,6 +5,6 @@
                      /* Including a header file twice causes all kinds */
                      /* of interesting problems.*/
 
-void startNET(int port);
+void startNET();
 
 #endif /* DEVNET_H */

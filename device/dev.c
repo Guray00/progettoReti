@@ -22,6 +22,7 @@
 int to_child_fd[2];
 int to_parent_fd[2];
 int pid;
+int DEVICE_PORT;
 struct connection con;
 
 
@@ -38,8 +39,8 @@ int portCheck(int argc, char* argv[]){
 int main(int argc, char* argv[])
 {   
     // recupera la porta sulla quale si comunica
-    int port = portCheck(argc, argv);
-    con.port = port;
+    DEVICE_PORT = portCheck(argc, argv);
+    con.port = DEVICE_PORT;
     con.prev = NULL;
     con.next = NULL;
 
@@ -78,7 +79,7 @@ int main(int argc, char* argv[])
         // avvio il backend del device
         // per la gestione delle richieste
         // di rete
-        startNET(port);
+        startNET();
     }
 
     return 0;

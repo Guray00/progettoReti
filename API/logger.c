@@ -54,7 +54,7 @@ void _slog(char *f,int l,char *msg,...)
     {
         fprintf(__log_file, "\033[0;32m[%s]\033[0m ", buff);
         va_start(ap,msg);
-        fprintf(__log_file,"(\033[0;35m%-8s\033[0m:\033[1;34m%-4i\033[0m):\t",f,l);
+        fprintf(__log_file,"(\033[0;35m%-20s\033[0m:\033[1;34m%i\033[0m):",f,l);
         vfprintf(__log_file,msg,ap);
         fprintf(__log_file,"\n");
         va_end(ap);

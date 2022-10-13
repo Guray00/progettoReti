@@ -30,6 +30,8 @@ extern struct connection con;
 
 // memorizza lo status di loggato o meno
 short unsigned int STATUS = OFFLINE;
+char SCENE [MAX_USERNAME_SIZE];
+int ret;
 
 // menu per un utente non collegato
 const char MENU[] = 
@@ -113,7 +115,7 @@ int command_to_code(char *command){
         return CHAT_CODE;
     
     else if (strcmp(command, "share")   == 0)
-        return 6;
+        return SHARE_CODE;
     
     else if (strcmp(command, "out")     == 0)
         return LOGOUT_CODE;
@@ -129,13 +131,14 @@ void fstdin(){
 
 // MACRO  per inviare al network una richiesta
 int send_request_to_net(char* buffer){
-    char ret_code[4], result;
+    char ret_code[4];//, result;
+    int result;
 
     // GUI -> NET, invio la richiesta
     write(to_parent_fd[1], buffer, strlen(buffer) + 1);
 
     // NET -> GUI, aspetto la risposta
-    read(to_child_fd[0], ret_code, 4);
+    read(to_child_fd[0], ret_code, sizeof(ret_code));
     result = atoi(ret_code);               // converto la risposta
 
     return result;
@@ -190,13 +193,14 @@ int login_limit(){
 
 
 // verifica se un utente è online
-int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
+short int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
     char buffer[MAX_REQUEST_LEN];
     int ret;
 
     // genero la richiesta
     sprintf(buffer, "%hd %s", ISONLINE_CODE, usr);
     ret = send_request_to_net(buffer);
+
     return ret;
 }
 
@@ -254,7 +258,7 @@ void send_msg_to_net(char *dst, char *msg){
 
 
 // gestisce la richiesta di hanging
-void hanging(){
+int hanging(){
     char buffer[MAX_REQUEST_LEN];
     char path[100];
     FILE* file;
@@ -269,7 +273,9 @@ void hanging(){
 
     // GUI -> NET, mando la richiesta di hanging
     sprintf(buffer, "%d", HANGING_CODE);
-    send_request_to_net(buffer);
+    ret = send_request_to_net(buffer);
+
+    if(ret < 0) return ret;
 
     // mostra a schermo l'header del hanging
     print_header("HANGING");
@@ -307,6 +313,8 @@ void hanging(){
     system("clear");
     print_logged_menu(con.username, con.port);
     //fstdin();   // pulisco l'input
+
+    return 0;
 }
 
 
@@ -323,23 +331,23 @@ void format_msg(char *formatted_msg, char *source, char* msg){
 
 
 // invia una richiesta "show" al network
-void show_request_to_net(char* mittente){
+int show_request_to_net(char* mittente){
     char buffer[MAX_USERNAME_SIZE];
     sprintf(buffer, "%d %s", SHOW_CODE, mittente);
 
-    send_request_to_net(buffer);
+    return send_request_to_net(buffer);
 }
 
-void chat_request_to_net(char* mittente){
+int chat_request_to_net(char* mittente){
     char buffer[MAX_USERNAME_SIZE];
     sprintf(buffer, "%d %s", CHAT_CODE, mittente);
 
-    send_request_to_net(buffer);
+    return send_request_to_net(buffer);
 }
 
 
 // Esecuzione del comando di show della gui
-void show(char *mittente){
+int show(char *mittente){
     FILE *file;
     char header[100];
     char path[100];
@@ -350,7 +358,8 @@ void show(char *mittente){
     char msg[MAX_REQUEST_LEN] = "";
 
     // [GUI->NET] genero la richiesta
-    show_request_to_net(mittente);
+    ret = show_request_to_net(mittente);
+    if (ret < 0) return ret;
 
     // [GUI]
     sprintf(header, "NUOVI MESSAGGI da %s", mittente);
@@ -358,10 +367,10 @@ void show(char *mittente){
 
     // creo il path del file
     sprintf(path, "./devices_data/%s/%s",     con.username, SHOW_FILE);
-    file     = fopen(path, "r");
+    file = fopen(path, "r");
     if(file < 0){
         perror("errore apertura file");
-        return;
+        return  -1;
     }
 
     // mostro a schermo il parsing del contenuto del file
@@ -383,12 +392,13 @@ void show(char *mittente){
     // mostro nuovamente a schermo il vecchio menu
     system("clear");
     print_logged_menu(con.username, con.port);
+    return 0;
 }
 
 // stampa il visualizzato in base allo stato che gli viene passato
 void print_view_mark(int status){
     printf("\033[0;32m [*");
-        if (status == 1) 
+        if (status >0) 
             printf("*]\033[0m\n");
         else 
             printf("]\033[0m\n");
@@ -400,21 +410,55 @@ void print_view_mark(int status){
 void startGUI(){    
         short int ret;  
 
+
+        char command[15], user[SIZE], pw[SIZE];
+        char msg[MAX_REQUEST_LEN]; int msg_size;
+        short int status;
+        FILE *historic;
+        char path[500];
+        char buffer[MAX_REQUEST_LEN];
+        // int i;
+
         // Stampa il menu delle scelte
         print_menu();
 
+        /*int fdmax = -1;
+        fd_set readers, master;
+
+        FD_SET(fileno(stdin), &master);
+        fdmax = (fileno(stdin) > fdmax) ? fileno(stdin) : fdmax;
+
+        FD_SET(to_child_fd[0], &master);           // aggiungo le risposte dal server in ascolto
+        fdmax = (to_child_fd[0] > fdmax) ? to_child_fd[0] : fdmax;
+        */
         
         do {
-            char command[15], user[SIZE], pw[SIZE];
-            char msg[MAX_REQUEST_LEN]; int msg_size;
-            int status;
-            FILE *historic;
-            char path[500];
+
+            //  seleziono i socket che sono attivi
+            /*
+            FD_ZERO(&readers);
+            readers = master;  
+            ret = select((fdmax)+1, &readers, NULL, NULL, NULL);
+            if(ret<=0){
+                perror("Errore nella select");
+                exit(1);
+            }
+            
+            for(i = 0; i <= fdmax; i++){
+
+            if(!FD_ISSET(i, &readers))
+                continue;
+
+            if (i == to_child_fd[0]){
+                handle_message();
+            }
+
+            else if (i == fileno(stdin)){
+            */
 
             // chiede l'inserimento di un comando
+            
             scanf("%s", command);
-
-            slog("comando: %s", command);
             switch(command_to_code(command)){
 
                 case SIGNUP_CODE:
@@ -463,7 +507,11 @@ void startGUI(){
                         system("clear");                                // pulisco la shell
                         print_logged_menu(con.username, con.port);
                     }
-                    else 
+
+                    else if(ret < 0)
+                        printf("Il server non è raggiungibile sulla porta specificata, riprovare.");
+                    
+                    else
                         printf("Credenziali errate, login non effettuato.\n\n");
                     
 
@@ -485,14 +533,21 @@ void startGUI(){
                         break;
                     }
 
-                    // invio al network la richiesta di realizzare una nuova chat
+                    /*  [GUI->NET] invio al network la richiesta di realizzare una nuova chat
+                        In questa parte del programma si verifica tramite network se è possibile
+                        instaurare una connessione con il destinatario, se non è già stata creata.
+                        In base a tale risposta, tutti i messaggi inviati successivamente considereranno
+                        l'utente connesso o meno in base a ciò.*/
                     chat_request_to_net(user);
 
                     // TODO: controllare se il nome è in rubrica e corretto
-                    status = checkUserOnline(user);        
+
 
                     // mostra la parte superiore della chat
                     printChatHeader(user);
+
+                    // salvo il socket
+                    strcpy(SCENE, user);
 
                     // mostra a schermo la cronologia e ne consente l'aggiornamento
                     print_historic(con.username, user);
@@ -527,8 +582,8 @@ void startGUI(){
                             fprintf(historic, "\n");  // deve essere aggiunto newline
 
                             printf(formatted_msg);                  // stampa a schermo
+                            status = checkUserOnline(user);        
                             print_view_mark(status);
-
 
                             send_msg_to_net(user, msg);     // invia al network la richiesta di invio messaggio, 
                                                             // e risponde segnalando se è stato recapitato direttamente o al server
@@ -540,6 +595,8 @@ void startGUI(){
                     } while(strcmp(msg, "\\q") != 0);
 
                     // riporta al menu principale
+                    sprintf(buffer, "%d", QUITCHAT_CODE);
+                    send_request_to_net(buffer);
                     fclose(historic);   // chiudo il file della cronologia
                     system("clear");    // pulisco la schermata
                     print_logged_menu(con.username, con.port);
@@ -551,7 +608,8 @@ void startGUI(){
                         break;
                     }
 
-                    hanging();
+                    ret = hanging();
+                    if (ret < 0) break;
                     break;
 
                 case SHOW_CODE:
@@ -569,9 +627,10 @@ void startGUI(){
                         break;
                     }
 
-                    show(user);
+                    ret = show(user);
                     break;
 
+                // l'utente ha fatto "out" da shell
                 case LOGOUT_CODE:
                     STATUS = OFFLINE;
 
@@ -590,7 +649,12 @@ void startGUI(){
                     break;
             }
 
+        if (ret < 0) printf("Non è stato possibile inviare la richiesta.\n");
+        //} // chiude if
+        //} // chiude for
+
         } while (1);
+
         
         // programma terminato, chiusura della pipe di comunicazione
         close(to_parent_fd[1]);

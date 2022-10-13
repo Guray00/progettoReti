@@ -156,7 +156,9 @@ void intHandler() {
         // invio la richiesta di disconnessione
         slog("mando richiesta disconnesione su socket %d", p->socket);
         ret = send_request(p->socket, buffer);
+
         if(ret > 0){
+
             slog("==> chiuso socket %d", p->socket);
 
             // se è andata a buon fine termino l'iesimo socket
@@ -164,7 +166,6 @@ void intHandler() {
             p = close_connection(p);
         }
     }
-
 
     exit(0);
 }
@@ -380,21 +381,23 @@ int login(int sock, struct user usr, int port){
 
 // gestisce la richiesta di nuova connessione di un dispositivo
 void newConnection(){
+    int clen = sizeof(clientaddr);
+    int fd;
 
     // accetto richiesta e salvo l'informazione nel socket csd
-    csd = accept(sd, (struct sockaddr*) &clientaddr, &len);
-    if(csd < 0){
+    fd = accept(sd, (struct sockaddr*) &clientaddr, &clen);
+    if(fd < 0){
         perror("Errore in accept");
         return;
     }
 
 
     slog("Il server ha accettato la connessione");
-    FD_SET(csd, &master);
-    if(csd > fd_max) fd_max = csd;  // avanzo il socket di id massimo, fd_max contiene il max fd
+    FD_SET(fd, &master);
+    if(fd > fd_max) fd_max = fd;  // avanzo il socket di id massimo, fd_max contiene il max fd
     
     // aggiungo la connessione alla lista
-    new_connection(&con, csd);
+    new_connection(&con, fd);
 }
 
 
@@ -408,8 +411,9 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
     char usr[MAX_USERNAME_SIZE];
     int res = -1;
     
-    char logout[255];
-    char p[255];
+    //char logout[255];
+    int p;
+    unsigned long lout, lin;
 
     file = fopen(FILE_REGISTER, "r");
 
@@ -418,14 +422,15 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
         return -1;
     }
 
-    while(fscanf(file, "%s | %s | %s | %s", &usr, &p, NULL, &logout) != EOF) {
+    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &lin, &lout) != EOF) {
 
         if(strcmp(usr, username) == 0) {
+
             // se è != 0 significa che non è online
-            if (logout != 0)
+            if (lout != 0)
                 res = 0;
             else
-                res = atoi(p);
+                res = p;
 
             break;
         }
@@ -434,6 +439,38 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
     fclose(file);
     return res;
 }
+
+
+// DEPRECATO: non più utilizzato
+/*
+short int get_username_by_port(char *username, int pin){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE];
+    int res = -1;
+    
+    //char logout[255];
+    int p;
+    unsigned long lout, lin;
+
+    file = fopen(FILE_REGISTER, "r");
+
+    if(!file) {
+        perror("Errore apertura file registro");
+        return -1;
+    }
+
+    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &lin, &lout) != EOF) {
+        if(p == pin) {
+            strcpy(username, usr);
+            res = 1;
+            break;
+        }
+    }
+
+    fclose(file);
+    return res;
+}
+*/
 
 
 int update_hanging_file(char* dst, char* src){
@@ -634,32 +671,10 @@ void send_hanging(int device){
     //FILE *file;
     char usr[MAX_USERNAME_SIZE];
     char path[100];
-    //char cmd[100];
-    //char buffer[MAX_REQUEST_LEN];
-
-    /*
-    strcpy(usr, get_username_by_connection(&con, device));
-    sprintf(path, "./server_data/%s/%s", usr, HANGING_FILE);
-    sprintf(cmd, "mkdir -p ./server_data/%s/ && touch ./server_data/%s/%s", usr, usr, HANGING_FILE);   // mi assicuro che il file esista
-    system(cmd);
     
-    file = fopen(path, "r");
-    if(!file) {
-        perror("Errore file per hanging");
-        return;
-    }
-
-    // leggo MAX_REQUEST_LEN per volta il contenuto del messaggio
-    while(fgets(buffer, MAX_REQUEST_LEN, file) != NULL){
-        send_request(device, buffer);
-    }
-
-    fclose(file);
-    */
     strcpy(usr, get_username_by_connection(&con, device));
     sprintf(path, "./server_data/%s/%s", usr, HANGING_FILE);
     send_file(path, device);
-
 }
 
 // invia il file di show
@@ -681,7 +696,87 @@ void send_show(int device, char* mittente){
     sprintf(cmd, "rm %s", path);
     system(cmd);
     remove_from_hanging_file(usr, mittente);
+
+    // informo colui che ha inviato i messaggi dell'avvenuta ricezione
+    // TODO: notifica avvenuta lettura
 }
+
+
+// calcola l'hash di una stringa ricevuta
+// viene utilizzato per la verifica dell'hash
+// per la connessione tra dispositivi
+unsigned long hash(char *str){
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++) )
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
+// ritorna l'hash di un utente
+unsigned long generate_user_hash(char* username){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE], hash_str[MAX_PW_SIZE + MAX_USERNAME_SIZE + 1];
+    unsigned long res;
+
+    file = fopen(FILE_USERS, "r");
+
+    if(!file) {
+        perror("Errore apertura file registro");
+        return -1;
+    }
+
+    res = 0;
+    while(fscanf(file, "%s | %s", &usr, &pw) != EOF) {
+
+        // se ho trovato l'utente
+        if(strcmp(usr, username) == 0) {
+            sprintf(hash_str, "%s %s", usr, pw);
+            res = hash(hash_str);
+            break;
+        }
+    }
+
+    fclose(file);
+    return res;
+}
+
+/*  Quando un utente si connette invia un hash del proprio 
+    nome utente e password per consentire al ricevitore di
+    accertarne l'autenticità. Questa funzione riceve un buffer
+    contenente il nome utente e l'hash e verifica se corrisponde
+    con quello calcolato dal server */
+void send_whois(int device, char* buf){
+    unsigned long hash_value;           // il valore dell'hash da verificare
+    char username[MAX_USERNAME_SIZE];   // l'username passato a cui corrisponde l'hash
+    unsigned long hash_correct;         // l'hash calcolato dal server per l'utente
+    short int response;                 // risposta del server al device
+
+    // recupero dal buffer i dati: [USERNAME] [HASH]
+    sscanf(buf, "%s %lu", username, &hash_value);
+
+    // calcolo l'hash per l'utente che ha scritto
+    hash_correct = generate_user_hash(username);
+    printf("TESTING %s\n", username);
+    printf("hash corretto:  %lu\n", hash_correct);
+    printf("hash originale: %lu\n", hash_value);
+
+    // se l'hash corrisponde, ritorno 1
+    if (hash_correct == hash_value){
+        response = htons(1);
+    }
+    
+    // se non combacia ritorno -1
+    else {
+        response = htons(-1);
+    }
+
+    // invio la risposta al device
+    send(i, (void*) &response, sizeof(uint16_t), 0);
+}
+
 
 int main(int argc, char* argv[]){
 
@@ -692,6 +787,7 @@ int main(int argc, char* argv[]){
     
     //  assegna la gestione del segnale di int
     signal(SIGINT, intHandler);
+    signal(SIGSEGV, intHandler);
     signal(SIGPIPE, pipeHandler);
 
 
@@ -778,15 +874,18 @@ int main(int argc, char* argv[]){
 
                         // DISCONNECT
                         case LOGOUT_CODE:
-                            slog("[SOCKET %d] Device chiuso", i);
                             updateRegister(usr.username, port, 0, (unsigned long) time(NULL)); // segno il logout del device
+                            slog("[SOCKET %d] Device chiuso", i);
 
                             // rimuovo dalla lista la connessione i-esima
                             close_connection_by_socket(&con, i);
 
+                            slog("server è riuscito anche con la chiusura totale");
+
                             // rimuovo la connessione dai 
                             // socket ascoltati
                             FD_CLR(i, &master);
+
                             break;
 
                         // SIGNUP
@@ -819,6 +918,7 @@ int main(int argc, char* argv[]){
 
                         case ISONLINE_CODE:
                             ret = isOnline(buffer);
+                            slog("STO RESTITUNODO: %hd <------", ret);
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
                             break;
@@ -831,24 +931,26 @@ int main(int argc, char* argv[]){
                             */
 
                             
-                            ret = 0;//isOnline(buffer);
-                            memset(buffer, 0, sizeof(buffer));
+                            ret = isOnline(buffer);
 
                             // se il dispositivo è raggiungibile
                             if (ret > 0){
-                                sprintf(buffer, "%d %s %d", ret, ADDRESS, port);
+                                char req [MAX_REQUEST_LEN];
+
+                                // informo il device che sta per giungere una richiesta
+                                // sprintf(req, "%d %s", CREATECON_CODE, get_username_by_connection(&con, i));
+                                // send_request(find_connection(&con, buffer)->socket, req);
+
+                                // restituisco i dati a chi ha chiesto
+                                sprintf(buffer, "%d %s", ret, ADDRESS);
                             }
                             // se non è raggiungibile
                             else {
                                 sprintf(buffer, "%d", ret);
                             }
 
-
-
                             ret = send_request(i, buffer);
-
-                            //strcpy(buffer, get_username_by_connection(&con, i));
-                            slog("[SERVER->NET (%d)]: mandato %d", i, ret);
+                            
                             break;
                         
                         case PENDANTMSG_CODE:
@@ -869,6 +971,10 @@ int main(int argc, char* argv[]){
                         case SHOW_CODE:
                             sscanf(buffer, "%s", dst);
                             send_show(i, dst);
+                            break;
+
+                        case WHOIS_CODE:
+                            send_whois(i, buffer);
                             break;
                     }   
                 }
