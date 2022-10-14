@@ -10,6 +10,9 @@
 #include <signal.h>
 #include <termios.h>
 #include <ctype.h>
+#include <errno.h>
+
+#include <netinet/tcp.h>
 
 // ====================
 #include "./dev_net.h"
@@ -29,6 +32,8 @@ extern int pid;                 // pid del processo
 extern struct connection con;   // informazioni sulla connessione
 extern int DEVICE_PORT;
 char SCENE[MAX_USERNAME_SIZE];
+
+struct timeval timeout;      
 // ===========================
 
 // GLOBAL ===================================================================
@@ -174,6 +179,8 @@ int init_server_connection(int port){
     }
 
     slog("socket realizzato");
+    
+
 
     // preparazione indirizzi per raggiungere il server
     memset(&servaddr, 0, sizeof(servaddr)); // pulizia
@@ -219,13 +226,14 @@ int send_device_request(int fd, char buffer[MAX_REQUEST_LEN]){
     int bytes_to_send, sent_bytes;
     char* buf = buffer;
 
-    if (!FD_ISSET(fd, &master)) return -1;
+    // if (!FD_ISSET(fd, &master)) return -1;
 
     bytes_to_send = MAX_REQUEST_LEN;
     while(bytes_to_send > 0) {
         sent_bytes = send(fd, (void*) buf, bytes_to_send, 0);
-            if(sent_bytes == -1){
+            if(sent_bytes == -1 || sent_bytes == 0){
                 perror("errore invio");
+                slog("ERRORE INVIO");
                 return -1;
             } 
             
@@ -242,7 +250,7 @@ int send_request(int code, int fd, char buffer[MAX_REQUEST_LEN]){
     char command [MAX_REQUEST_LEN];
 
     // controllo che effettivamente sia raggiungibile
-    if (!FD_ISSET(fd, &master)) return -1;
+    // if (!FD_ISSET(fd, &master)) return -1;
 
     sprintf(command, "%d %s", code, buffer);
     ret = send_device_request(fd, command);
@@ -279,7 +287,7 @@ void recive_from_server(char buffer[MAX_REQUEST_LEN]){
 int recive_from_device(char *buffer, int fd){
     memset(buffer, 0, MAX_REQUEST_LEN); // resetto il contenuto del buffer
 
-    if (!FD_ISSET(fd, &master)) return -1;
+    //if (!FD_ISSET(fd, &master)) return -1;
     
     int bytes_to_receive, received_bytes;
     char *buf = buffer;    
@@ -324,11 +332,11 @@ void server_handler(){
     }
 }
 
-void notify(char *alert, char *source, char *msg){
+void notify(char* msg, char *COLOR){
     char formatted_msg[MAX_REQUEST_LEN];
 
     printf("\n");
-    sprintf(formatted_msg, ANSI_COLOR_BLUE "---[  %s %s:%s  ]---" ANSI_COLOR_RESET, alert, source, msg);
+    sprintf(formatted_msg,  "%s ---[ %s ]--- %s" , COLOR, msg, ANSI_COLOR_RESET);
     print_centered(formatted_msg);
     printf("\n");
 }
@@ -340,7 +348,7 @@ void recive_p2p_msg(int device, char *buffer){
     char formatted_msg[MAX_REQUEST_LEN];
 
     // genero la richiesta per la gui
-    slog("SCENE VALE: %s", SCENE);
+    // slog("SCENE VALE: %s", SCENE);
     strcpy(src, get_username_by_connection(&con, device));
 
     if (strcmp(src, SCENE) == 0){
@@ -349,8 +357,8 @@ void recive_p2p_msg(int device, char *buffer){
     }
 
     else {
-        slog("RICEVUTA NOTIFICA");
-        notify("Nuovo messaggio da ", src, buffer);
+        sprintf(formatted_msg, "Nuovo messaggio da %s: %s", src, buffer);
+        notify(formatted_msg, ANSI_COLOR_BLUE);
     }
 }
 
@@ -370,7 +378,8 @@ void device_handler(int device){
         // DISCONNECT REQUEST
         case LOGOUT_CODE:
             slog("arrivata al net chiusura device");
-            notify("Utente disconnesso", get_username_by_connection(&con, device), "");
+            sprintf(buffer, "Utente %s disconnesso", get_username_by_connection(&con, device));
+            notify(buffer, ANSI_COLOR_RED);
 
 
             close_connection_by_socket(&con, device);
@@ -573,8 +582,6 @@ int send_msg(char* buffer){
         ret = send_request(CHAT_CODE, dst_connection->socket, msg);
     }
 
-    print_connection(&con);
-
     return ret;
 }
 
@@ -587,7 +594,7 @@ int recive_file(int fd, char *path){
     int size;
     char c;
 
-    if (!FD_ISSET(fd, &master)) return -1;
+    //if (!FD_ISSET(fd, &master)) return -1;
 
     strcpy(dirpath, path);    
     dirname(dirpath);

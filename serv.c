@@ -340,7 +340,7 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
         
         // se leggo l'utente attuale scrivo nel file una nuova versione con login e logout aggiornato
         if(strcmp(usr, username) == 0) {
-            if(lin == 0) lin = li;
+            if(lin == 0) lin = li; // se viene fornito 0 al login significa che non è significativo
             fprintf(tmp, "%s | %d | %lu | %lu\n", username, port, lin, lon);
         }
 
@@ -440,37 +440,6 @@ short int isOnline(char username[MAX_USERNAME_SIZE]){
     return res;
 }
 
-
-// DEPRECATO: non più utilizzato
-/*
-short int get_username_by_port(char *username, int pin){
-    FILE *file;
-    char usr[MAX_USERNAME_SIZE];
-    int res = -1;
-    
-    //char logout[255];
-    int p;
-    unsigned long lout, lin;
-
-    file = fopen(FILE_REGISTER, "r");
-
-    if(!file) {
-        perror("Errore apertura file registro");
-        return -1;
-    }
-
-    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &lin, &lout) != EOF) {
-        if(p == pin) {
-            strcpy(username, usr);
-            res = 1;
-            break;
-        }
-    }
-
-    fclose(file);
-    return res;
-}
-*/
 
 
 int update_hanging_file(char* dst, char* src){
@@ -759,9 +728,9 @@ void send_whois(int device, char* buf){
 
     // calcolo l'hash per l'utente che ha scritto
     hash_correct = generate_user_hash(username);
-    printf("TESTING %s\n", username);
-    printf("hash corretto:  %lu\n", hash_correct);
-    printf("hash originale: %lu\n", hash_value);
+    // printf("TESTING %s\n", username);
+    // printf("hash corretto:  %lu\n", hash_correct);
+    // printf("hash originale: %lu\n", hash_value);
 
     // se l'hash corrisponde, ritorno 1
     if (hash_correct == hash_value){
@@ -783,7 +752,6 @@ int main(int argc, char* argv[]){
     // variabili di utility
     char buffer[MAX_REQUEST_LEN];
     struct user usr;
-
     
     //  assegna la gestione del segnale di int
     signal(SIGINT, intHandler);
@@ -874,13 +842,11 @@ int main(int argc, char* argv[]){
 
                         // DISCONNECT
                         case LOGOUT_CODE:
-                            updateRegister(usr.username, port, 0, (unsigned long) time(NULL)); // segno il logout del device
-                            slog("[SOCKET %d] Device chiuso", i);
+                            slog("[SERVER] Sto scollegando %s(%d)", get_username_by_connection(&con, i), i);
+                            updateRegister(get_username_by_connection(&con, i), port, (unsigned long) 0, (unsigned long) time(NULL)); // segno il logout del device
 
                             // rimuovo dalla lista la connessione i-esima
                             close_connection_by_socket(&con, i);
-
-                            slog("server è riuscito anche con la chiusura totale");
 
                             // rimuovo la connessione dai 
                             // socket ascoltati
