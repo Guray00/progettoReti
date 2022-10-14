@@ -35,16 +35,18 @@ int ret;
 
 // menu per un utente non collegato
 const char MENU[] = 
-    "1) signup\t[usr] [pw]\n"
-    "2) in\t\t[usr] [pw]\n\n";
+    "1) signup  [usr] [pw]" ANSI_COLOR_GREY " ⟶   Crea un nuovo account" ANSI_COLOR_RESET "\n"
+    "2) in      [usr] [pw]" ANSI_COLOR_GREY " ⟶   Accedi al tuo account" ANSI_COLOR_RESET "\n\n"
+    ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
 
 // menu per un utente collegato
 const char MENU2[] = 
-    "1) hanging\n"
-    "2) show\n"
-    "3) chat\n"
-    "4) share\n"
-    "5) out\n\n";
+    "1) hanging            " ANSI_COLOR_GREY " ⟶   Resoconto messaggi ricevuti mentre eri offline" ANSI_COLOR_RESET "\n"
+    "2) show     [username]" ANSI_COLOR_GREY " ⟶   Mostra i messaggi riceuti mentre eri offline" ANSI_COLOR_RESET "\n"
+    "3) chat     [username]" ANSI_COLOR_GREY " ⟶   Parla con qualcuno!" ANSI_COLOR_RESET "\n"
+    "4) share              " ANSI_COLOR_GREY " ⟶   Condividi un documente con un utente" ANSI_COLOR_RESET "\n"
+    "5) out                " ANSI_COLOR_GREY " ⟶   Esci dall'account" ANSI_COLOR_RESET "\n\n"
+    ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
 
 // stampa una riga di asterischi
 void print_separation_line(){
@@ -53,7 +55,7 @@ void print_separation_line(){
     ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 
     for(i = 0; i < w.ws_col; i++)
-        printf("*");
+        printf("─");
     
     printf("\n");
 }
@@ -70,6 +72,22 @@ void print_centered(char* txt){
     for (i = 0; i < size; i++) printf(" ");
     printf("%s", txt);
     for (i = 0; i < size; i++) printf(" ");
+    printf("\n");
+}
+
+void print_centered_dotted(char* txt){
+    int size, len, i;
+    struct winsize w;
+    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+
+    len = strlen(txt);
+    size = (w.ws_col - len)/2;
+    
+    for (i = 0; i < size/2; i++) {printf(" ─");}
+    printf("%s", txt);
+    for (i = 0; i < size/2; i++) {printf("─ ");}
+    
+    if (w.ws_col != (size*2+len)) printf("─");
     printf("\n");
 }
 
@@ -242,7 +260,7 @@ void printChatHeader(char *dest){
 
     system("clear");
     print_separation_line(); // ***
-    sprintf(header, "CHAT con %s", dest);
+    sprintf(header, "%s ⟶  %s", con.username, dest);
     print_centered(header);
     print_separation_line(); // ***
     printf("\n");

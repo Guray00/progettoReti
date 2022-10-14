@@ -174,11 +174,7 @@ int init_server_connection(int port){
     if(sd < 0){
         perror("Errore all'avvio del socket");
         exit(-1);
-    }
-
-    slog("socket realizzato");
-    
-
+    }    
 
     // preparazione indirizzi per raggiungere il server
     memset(&servaddr, 0, sizeof(servaddr)); // pulizia
@@ -198,7 +194,7 @@ int init_server_connection(int port){
     fdmax = (sd > fdmax) ? sd : fdmax;
 
     // connessione confermata
-    slog("Device (%d) connesso al server", DEVICE_PORT);
+    slog("[NET:%d] Connessione al server conclusa", DEVICE_PORT);
     return 1;
 }
 
@@ -213,13 +209,13 @@ short int recive_code_from_server(){
     }
 
     res_code = ntohs(res_code);
-    slog("network riceve: %hd", res_code);
+    //slog("network riceve: %hd", res_code);
 
     return res_code;
 }
 
 
-
+// Invia una richiesta a un device specificato
 int send_device_request(int fd, char buffer[MAX_REQUEST_LEN]){
     int bytes_to_send, sent_bytes;
     char* buf = buffer;
@@ -306,7 +302,19 @@ int recive_from_device(char *buffer, int fd){
     return received_bytes;
 }
 
+// gestore notifiche a schermo
+void notify(char* msg, char *COLOR){
+    char formatted_msg[MAX_REQUEST_LEN];
 
+    printf("\n");
+    sprintf(formatted_msg,  "[ %s ]" , msg);
+    printf(COLOR);
+    print_centered_dotted(formatted_msg);
+    printf(ANSI_COLOR_RESET);
+    printf("\n");
+}
+
+// Gestisce le richieste arrivate dal server e dirette al device
 void server_handler(){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
     short int code;                     // codice della richiesta effettuata
@@ -315,29 +323,22 @@ void server_handler(){
     recive_from_server(buffer);
     sscanf(buffer, "%hd %s", &code, buffer);
 
-    slog("ricevuto per net %hd e %s", code, buffer);
+    slog("[NET:%d] Ricevuto da server [%hd] e (%s)", DEVICE_PORT, code, buffer);
 
     switch(code){
 
         // DISCONNECT REQUEST
         case LOGOUT_CODE:
             slog("arrivata al net chiusura server");
-            printf("\n************* SERVER OFFLINE **************\n\n");
-            fflush(stdout);
+            notify("SERVER SPENTO", ANSI_COLOR_RED);            
 
+            // rimuovo il server dai socket ascoltati
             FD_CLR(sd, &master);
+
             break;
     }
 }
 
-void notify(char* msg, char *COLOR){
-    char formatted_msg[MAX_REQUEST_LEN];
-
-    printf("\n");
-    sprintf(formatted_msg,  "%s ---[ %s ]--- %s" , COLOR, msg, ANSI_COLOR_RESET);
-    print_centered(formatted_msg);
-    printf("\n");
-}
 
 // gestisce l'arrivo di un messaggio P2P
 void recive_p2p_msg(int device, char *buffer){
@@ -749,7 +750,6 @@ void gui_handler(){
     char* args;
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
 
-
     // recupero il tipo di richiesta in base al codice
     read(to_parent_fd[0], read_buffer, MAX_REQUEST_LEN);
     sscanf(read_buffer, "%hd %[^\t\n]", &code, buffer);
@@ -781,8 +781,8 @@ void gui_handler(){
 
             sprintf(read_buffer, "%s|%d", read_buffer, con.port);
             args = strtok(buffer, "|");
-            strcpy(con.username, args); 
-            args = strtok(buffer, "|"); // trovo la pw
+            strcpy(con.username, args);
+            args = strtok(NULL, "|");
             ret = send_server_request(read_buffer);
             if (ret < 0) break;
 
@@ -795,7 +795,7 @@ void gui_handler(){
             sprintf(hash_buffer,"%s %s", con.username, args);
             my_hash = hash(hash_buffer);
 
-            slog("lato network il login è completato");
+            //slog("IL MIO HASH [%s][%s | %s]: %lu", read_buffer, con.username, args, my_hash);
             break;
 
         case CHAT_CODE:
@@ -916,6 +916,8 @@ void startNET(){
                     socklen_t l;
                     char req[MAX_REQUEST_LEN];
                     char username[MAX_USERNAME_SIZE];
+                    char formatted_msg[MAX_MSG_SIZE];
+
 
                     l =  sizeof(devaddr);
 
@@ -934,14 +936,12 @@ void startNET(){
                     //if(ret < 0) break;
 
                     // controllo mediante server se l'utente è chi dice di essere
-                    slog("IL DEVICE MI HA PASSATO %s", req);
+                    //slog("IL DEVICE MI HA PASSATO %s", req);
                     ret = send_request(WHOIS_CODE, sd, req);
                     //if(ret < 0) break;
 
                     // attendo la risposta dal server
                     result = recive_code_from_server();
-
-                    slog("SONO ARRIVATO");
 
                     // autentificazione confermata, instauro la connessione
                     if (result > 0){
@@ -955,6 +955,9 @@ void startNET(){
                         // ascolto le nuove richieste in arrivo
                         FD_SET(fd, &master);
                         if(fd > fdmax) fdmax = fd;
+
+                        sprintf(formatted_msg, "%s si è appena collegato", get_username_by_connection(&con, fd));
+                        notify(formatted_msg, ANSI_COLOR_GREEN);
 
                         // TODO aggiornare la cronologia per il device
                         show_request_server(username); // la cronologia ora dovrebbe essere aggiornata

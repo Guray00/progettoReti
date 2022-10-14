@@ -8,5 +8,6 @@
 void startGUI();
 void format_msg(char *formatted_msg, char *source, char* msg);
 void print_centered(char*);
+void print_centered_dotted(char*);
 
 #endif /* DEVGUI_H */

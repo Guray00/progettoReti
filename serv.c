@@ -175,6 +175,47 @@ void pipeHandler() {
    // exit(0);
 }
 
+// calcola l'hash di una stringa ricevuta
+// viene utilizzato per la verifica dell'hash
+// per la connessione tra dispositivi
+unsigned long hash(char *str){
+    unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++) )
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+
+    return hash;
+}
+
+// ritorna l'hash di un utente
+unsigned long generate_user_hash(char* username){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE], hash_str[MAX_PW_SIZE + MAX_USERNAME_SIZE + 1];
+    unsigned long res;
+
+    file = fopen(FILE_USERS, "r");
+
+    if(!file) {
+        perror("Errore apertura file registro");
+        return -1;
+    }
+
+    res = 0;
+    while(fscanf(file, "%s | %s", &usr, &pw) != EOF) {
+
+        // se ho trovato l'utente
+        if(strcmp(usr, username) == 0) {
+            sprintf(hash_str, "%s %s", usr, pw);
+            res = hash(hash_str);
+            break;
+        }
+    }
+
+    fclose(file);
+    return res;
+}
+
 // **********************************************************************
 // * aggiunge un utente all'elenco generale dei registri                *
 // * utilizzata durente la procedura di registrazione                   *
@@ -324,6 +365,7 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
     unsigned long li;               // login timestamp letto
     unsigned long lo;               // logout timestamp letto
     char command[50];               // comando costruito per rinominare il file
+    unsigned short int missing = 1; // controlla se, per incongruenza, l'informazione è assente nel registro
 
     // apro i file
     file = fopen(FILE_REGISTER, "r");
@@ -342,6 +384,8 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
         if(strcmp(usr, username) == 0) {
             if(lin == 0) lin = li; // se viene fornito 0 al login significa che non è significativo
             fprintf(tmp, "%s | %d | %lu | %lu\n", username, port, lin, lon);
+
+            missing = 0;
         }
 
         // tutte le altre righe vengono copiate normalmente
@@ -349,6 +393,11 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
             fprintf(tmp, "%s | %d | %lu | %lu\n", usr, p, li, lo);
         }
     }
+
+    // se l'informazione viene trovata, per qualche motivo, assente dal registro
+    // nota: essendo l'informazione assente, si considera come login time (anche se fornito)
+    // pari a quello attuale perchè ritenuto non significativo quello passato dall'utente
+    if (missing) fprintf(tmp, "%s | %d | %lu | %lu\n", username, port, (unsigned long) time(NULL), lon);
 
     // chiudo i file
     fclose(file);
@@ -363,7 +412,7 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
 int login(int sock, struct user usr, int port){
 
     // TODO: verificare che l'utente non sia già connesso
-
+    unsigned long test;
     int flag = auth(usr);
 
     if (flag){
@@ -375,6 +424,9 @@ int login(int sock, struct user usr, int port){
         // imposta l'username alla connessione
         set_connection(&con, usr.username, sock);        
     }
+
+    test = generate_user_hash(usr.username);
+    //printf("calcolato hash: %lu\n", test);
 
     return flag;
 }
@@ -671,46 +723,7 @@ void send_show(int device, char* mittente){
 }
 
 
-// calcola l'hash di una stringa ricevuta
-// viene utilizzato per la verifica dell'hash
-// per la connessione tra dispositivi
-unsigned long hash(char *str){
-    unsigned long hash = 5381;
-    int c;
 
-    while ((c = *str++) )
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-
-    return hash;
-}
-
-// ritorna l'hash di un utente
-unsigned long generate_user_hash(char* username){
-    FILE *file;
-    char usr[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE], hash_str[MAX_PW_SIZE + MAX_USERNAME_SIZE + 1];
-    unsigned long res;
-
-    file = fopen(FILE_USERS, "r");
-
-    if(!file) {
-        perror("Errore apertura file registro");
-        return -1;
-    }
-
-    res = 0;
-    while(fscanf(file, "%s | %s", &usr, &pw) != EOF) {
-
-        // se ho trovato l'utente
-        if(strcmp(usr, username) == 0) {
-            sprintf(hash_str, "%s %s", usr, pw);
-            res = hash(hash_str);
-            break;
-        }
-    }
-
-    fclose(file);
-    return res;
-}
 
 /*  Quando un utente si connette invia un hash del proprio 
     nome utente e password per consentire al ricevitore di
@@ -728,9 +741,9 @@ void send_whois(int device, char* buf){
 
     // calcolo l'hash per l'utente che ha scritto
     hash_correct = generate_user_hash(username);
-    // printf("TESTING %s\n", username);
-    // printf("hash corretto:  %lu\n", hash_correct);
-    // printf("hash originale: %lu\n", hash_value);
+    //printf("TESTING %s\n", username);
+    //printf("hash corretto:  %lu\n", hash_correct);
+    //printf("hash originale: %lu\n", hash_value);
 
     // se l'hash corrisponde, ritorno 1
     if (hash_correct == hash_value){

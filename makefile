@@ -21,6 +21,3 @@ run:
 build:
 	make
 	make run
-
-
-	# gcc -Wall dev.o ./API/logger.c ./utils/costanti.h ./source/chat.c -o dev
