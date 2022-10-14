@@ -12,8 +12,6 @@
 #include <ctype.h>
 #include <errno.h>
 
-#include <netinet/tcp.h>
-
 // ====================
 #include "./dev_net.h"
 #include "./dev_gui.h"
@@ -25,7 +23,7 @@
 #include <libgen.h>  // utile per dirname e basename
 
 
-// EXTERN ====================
+// EXTERN ===================================================================
 extern int to_child_fd[2];      // pipe NET->GUI
 extern int to_parent_fd[2];     // pipe GUI->NET
 extern int pid;                 // pid del processo
@@ -34,7 +32,7 @@ extern int DEVICE_PORT;
 char SCENE[MAX_USERNAME_SIZE];
 
 struct timeval timeout;      
-// ===========================
+// ==========================================================================
 
 // GLOBAL ===================================================================
 int 
@@ -362,6 +360,34 @@ void recive_p2p_msg(int device, char *buffer){
     }
 }
 
+// aggiunge in fondo alla cronologia un messaggio p2p
+int append_msg_to_historic(char *mittente, char* msg){
+
+    char formatted_msg[MAX_MSG_SIZE];
+
+    char historic_path[100];
+    FILE  *historic;
+
+    sprintf(historic_path, "./devices_data/%s/%s.txt", con.username, mittente);
+    historic = fopen(historic_path, "a");
+    if(historic < 0){
+        perror("errore apertura file");
+        return -1;
+    }
+
+    // formatto il messaggio [UTENTE] [MESSAGGIO]
+    format_msg(formatted_msg, mittente, msg);
+
+    // aggiungo alla cronologia il messaggio
+    fprintf(historic, formatted_msg);
+    fprintf(historic, "\n");
+
+    // chiudo il file
+    fclose(historic);
+    
+    return 0;
+}
+
 
 void device_handler(int device){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
@@ -377,7 +403,7 @@ void device_handler(int device){
 
         // DISCONNECT REQUEST
         case LOGOUT_CODE:
-            slog("arrivata al net chiusura device");
+            //slog("arrivata al net chiusura device");
             sprintf(buffer, "Utente %s disconnesso", get_username_by_connection(&con, device));
             notify(buffer, ANSI_COLOR_RED);
 
@@ -387,8 +413,15 @@ void device_handler(int device){
             break;
 
         case CHAT_CODE:
-            // in buffer è presente il contenuto del messaggio
+            // NOTA: in buffer è presente il contenuto del messaggio
+
+            // gestisco graficamente la ricezione del messaggio
             recive_p2p_msg(device, buffer);
+            
+            // il messaggio ricevuto deve anche essere scritto nella cronologia
+            append_msg_to_historic(get_username_by_connection(&con, device), buffer);
+
+            //slog("FROM %s: %s", get_username_by_connection(&con, device), buffer);
             break;
     }
 }
@@ -487,7 +520,7 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
     return NULL;
 }
 
-void show_as_notify(int fd){
+void show_as_p2p(int fd){
     char path[100];
 
     FILE *file;
@@ -511,6 +544,7 @@ void show_as_notify(int fd){
 
     // mostro a schermo il parsing del contenuto del file
     while((read=getline(&line, &l, file)) != -1){
+        line[strcspn(line, "\n")] = 0;
         recive_p2p_msg(fd, line);
     }
 
@@ -569,18 +603,22 @@ int send_msg(char* buffer){
         // la connessione adesso è stata stabilita, dunque si 
         // manda il messaggio direttamente al socket
         else {
-            slog("la connessione è appena stata stabilita");
+            // slog("la connessione è appena stata stabilita");
+            notify("L'utente è attualmente online", ANSI_COLOR_GREEN);
             ret = send_request(CHAT_CODE, dst_connection->socket, msg);
-            slog("il messaggio l'ho mandato %d", ret);
+            // slog("il messaggio l'ho mandato %d", ret);
         }
     }
 
     // connessione trovata perchè creata precedentemente
     else {
         slog("questa è una connessione precedente");
-        slog("in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
+        //slog("in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
         ret = send_request(CHAT_CODE, dst_connection->socket, msg);
     }
+
+    // il messaggio è ora stato inviato, deve però essere salvato nella cronologia!
+    append_msg_to_historic(dst, msg);
 
     return ret;
 }
@@ -647,6 +685,9 @@ int hanging_request_server(){
     return 0;
 }
 
+
+// invia la richiesta di show al server
+// e aggiorna la cronologia dei messaggi
 int show_request_server(char *mittente){
     char path[100];
     char historic_path[100];
@@ -916,8 +957,8 @@ void startNET(){
                         if(fd > fdmax) fdmax = fd;
 
                         // TODO aggiornare la cronologia per il device
-                        //show_request_server(username); // la cronologia ora dovrebbe essere aggiornata
-                        //show_as_notify(fd);
+                        show_request_server(username); // la cronologia ora dovrebbe essere aggiornata
+                        show_as_p2p(fd);
                     }
                     
                     // autentificazione fallita, chido la comunicazione

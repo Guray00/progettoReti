@@ -414,8 +414,6 @@ void startGUI(){
         char command[15], user[SIZE], pw[SIZE];
         char msg[MAX_REQUEST_LEN]; int msg_size;
         short int status;
-        FILE *historic;
-        char path[500];
         char buffer[MAX_REQUEST_LEN];
         // int i;
 
@@ -551,8 +549,6 @@ void startGUI(){
 
                     // mostra a schermo la cronologia e ne consente l'aggiornamento
                     print_historic(con.username, user);
-                    sprintf(path, "./devices_data/%s/%s.txt", con.username, user);
-                    historic = fopen(path, "a");
 
                     // prende l'input dell'utente
                     do  {
@@ -574,13 +570,6 @@ void startGUI(){
                             // costtruisco il messaggio formattato
                             format_msg(formatted_msg, con.username, msg);
 
-                            // aggiungo il messaggio alla cronologia. Lo faccio senza
-                            // salvare [**] in quanto non sarebbero significativi a 
-                            // una prossima lettura, questi infatti verranno calcolati
-                            // ogni volta che si accede alla chat
-                            fprintf(historic, formatted_msg);  
-                            fprintf(historic, "\n");  // deve essere aggiunto newline
-
                             printf(formatted_msg);                  // stampa a schermo
                             status = checkUserOnline(user);        
                             print_view_mark(status);
@@ -597,7 +586,6 @@ void startGUI(){
                     // riporta al menu principale
                     sprintf(buffer, "%d", QUITCHAT_CODE);
                     send_request_to_net(buffer);
-                    fclose(historic);   // chiudo il file della cronologia
                     system("clear");    // pulisco la schermata
                     print_logged_menu(con.username, con.port);
                     break;
