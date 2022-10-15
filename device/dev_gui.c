@@ -524,13 +524,12 @@ void startGUI(){
                         print_logged_menu(con.username, con.port);
                     }
 
-                    else if(ret < 0)
-                        printf("Il server non è raggiungibile sulla porta specificata, riprovare.");
+                    else if(ret == 0)
+                        printf("Credenziali errate, riprovare\n\n");
                     
-                    else
-                        printf("Credenziali errate, login non effettuato.\n\n");
+                    else if (ret == -2)
+                        printf("Utente già connesso, non è possibile accedere contemporaneamente da più dispositivi.\n\n");
                     
-
                     break;
                 
                 case CHAT_CODE:
@@ -655,7 +654,7 @@ void startGUI(){
                     break;
             }
 
-        if (ret < 0) printf("Non è stato possibile inviare la richiesta.\n");
+        if (ret == -1) printf("Non è stato possibile inviare la richiesta.\n");
         //} // chiude if
         //} // chiude for
 

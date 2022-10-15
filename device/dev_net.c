@@ -405,8 +405,13 @@ void device_handler(int device){
         // DISCONNECT REQUEST
         case LOGOUT_CODE:
             //slog("arrivata al net chiusura device");
-            sprintf(buffer, "Utente %s disconnesso", get_username_by_connection(&con, device));
-            notify(buffer, ANSI_COLOR_RED);
+            sprintf(buffer, "%s", get_username_by_connection(&con, device));
+
+            // solo se trovo il nome stampo la notifica a schermo
+            if (strcmp(buffer, "(null)") != 0){
+                sprintf(buffer, "Utente %s disconnesso", get_username_by_connection(&con, device));
+                notify(buffer, ANSI_COLOR_RED);
+            }
 
 
             close_connection_by_socket(&con, device);
@@ -767,6 +772,8 @@ void gui_handler(){
 
             send_server_request(read_buffer);
             ret = recive_code_from_server();
+
+            // TODO: la signup dovrebbe staccare dal server
             break;
 
         // LOGIN REQUEST
@@ -774,22 +781,35 @@ void gui_handler(){
 
             // la prima cosa da fare è creare la connessione con il server
             ret = init_server_connection(4242);
+
             // se non è stato possibile connettersi al server
             // chiedo di tornare indietro
             if (ret < 0) break;
             
-
+            // recupero password e porta
             sprintf(read_buffer, "%s|%d", read_buffer, con.port);
             args = strtok(buffer, "|");
             strcpy(con.username, args);
             args = strtok(NULL, "|");
+
+            // invio la richiesta di accesso al server
             ret = send_server_request(read_buffer);
-            if (ret < 0) break;
+            if (ret <= 0) break;
 
 
-            // 1 se è connesso, 0 in caso contrario
+            // 1 se è connesso, 0 se non trovato, -2 se già acceduto
             ret = recive_code_from_server();
-            if (ret < 0) break;
+
+            // Se il risultato è 0 le credenziali erano errate, se il risultato era -2 era già online l'utente
+            // In entrambi i casi la connessione deve essere eliminata
+            if (ret == -2 || ret == 0) {
+                close(sd);
+                FD_CLR(sd, &master);
+                break;
+            }  
+            // in tutti gli altri casi torno indietro
+            else if( ret < 0) 
+                break;
 
             // genero il mio hash al login
             sprintf(hash_buffer,"%s %s", con.username, args);

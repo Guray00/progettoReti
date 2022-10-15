@@ -51,6 +51,7 @@ const char ADDRESS[] = "127.0.0.1";
 
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
+    const int enable = 1;
 
     // socket su cui ricevere le richieste
     sd = socket(DOMAIN, SOCK_STREAM, 0);
@@ -67,6 +68,8 @@ int init(const char* addr, int port){
     servaddr.sin_port = htons(port);
     inet_pton(DOMAIN, ADDRESS, &servaddr.sin_addr);
 
+    if(setsockopt(sd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &enable, sizeof(int))< 0)
+        perror("setsockopt fallito");
 
     ret = bind(sd, (struct sockaddr*) &servaddr, sizeof(servaddr));
     if(ret < 0){
@@ -303,33 +306,83 @@ int find_entry_users(char* username) {
     return 0;
 }
 
+/* port: utente online
+      0: utente offline
+     -1: utente non trovato   */
+short int isOnline(char *username){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE];
+    int res = -1;
+    
+    int p;
+    unsigned long lout, lin;
+
+    // apro il registro per consultare gli accessi
+    file = fopen(FILE_REGISTER, "r");
+    if(!file) {
+        perror("Errore apertura file registro");
+        return -1;
+    }
+
+    // analizzo ogni riga del registro per scoprire se l'utente è online
+    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &lin, &lout) != EOF) {
+
+        // se ho trovato l'utente nel registro
+        if(strcmp(usr, username) == 0) {
+
+            // se è != 0 significa che non è online
+            if (lout != 0)
+                res = 0;
+
+            // in ogni altro caso l'utente è invece online, restituisco la porta
+            else
+                res = p;
+
+            break;
+        }
+    }
+
+    // chiudo il file e restituisco il risultato
+    fclose(file);
+    return res;
+}
+
+
 
 /* verifica se l'utente esiste, restituisce:
     - utente trovato: 1
     - utente non trovato: 0
+    - utente già acceduto: -2
 */
 int auth(struct user usr) {
     FILE *file;
     char username[MAX_USERNAME_SIZE];
     char password[MAX_PW_SIZE];
+    short int result;
 
     file = fopen(FILE_USERS, "r");
-    slog("Richiesta accesso utente per: %s | %s", usr.username, usr.pw);
+    slog("[SERVER] Richiesta accesso utente per: %s | %s", usr.username, usr.pw);
 
     if(!file) {
         perror("Errore apertura file utenti");
         return 0;
     }
 
+    // di default considero con l'utente come non trovato
+    result = 0;
     while(fscanf(file, "%s | %s", &username, &password) != EOF) {
         if(strcmp(usr.username, username) == 0 && strcmp(usr.pw, password) == 0) {
-            fclose(file);
-            return 1;
+
+            // se l'utente è offline
+            if (isOnline(username) == 0)
+                result = 1;     // 1 se lo trovo e non è già stato fatto l'accesso
+            else
+                result = -2;    // -2 se lo trovo ma è già stato fatto l'accesso
         }
     }
 
     fclose(file);
-    return 0;
+    return result;
 }
 
 int signup(struct user usr){
@@ -409,13 +462,13 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
 }
 
 
+
 int login(int sock, struct user usr, int port){
 
-    // TODO: verificare che l'utente non sia già connesso
-    unsigned long test;
+    //unsigned long test;
     int flag = auth(usr);
 
-    if (flag){
+    if (flag == 1){
         struct connection *tmp, *tail;
         // aggiornare il registro degli accessi con il timestamp attuale di login
         // e 0 per segnalare che siamo ancora connessi
@@ -425,7 +478,7 @@ int login(int sock, struct user usr, int port){
         set_connection(&con, usr.username, sock);        
     }
 
-    test = generate_user_hash(usr.username);
+    // test = generate_user_hash(usr.username);
     //printf("calcolato hash: %lu\n", test);
 
     return flag;
@@ -452,45 +505,6 @@ void newConnection(){
     new_connection(&con, fd);
 }
 
-
-
-
-/*  1: utente online
-    0: utente offline
-   -1: utente non trovato   */
-short int isOnline(char username[MAX_USERNAME_SIZE]){
-    FILE *file;
-    char usr[MAX_USERNAME_SIZE];
-    int res = -1;
-    
-    //char logout[255];
-    int p;
-    unsigned long lout, lin;
-
-    file = fopen(FILE_REGISTER, "r");
-
-    if(!file) {
-        perror("Errore apertura file registro");
-        return -1;
-    }
-
-    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &lin, &lout) != EOF) {
-
-        if(strcmp(usr, username) == 0) {
-
-            // se è != 0 significa che non è online
-            if (lout != 0)
-                res = 0;
-            else
-                res = p;
-
-            break;
-        }
-    }
-
-    fclose(file);
-    return res;
-}
 
 
 
@@ -636,6 +650,8 @@ void write_pendant(char* src, char* dst, char* msg){
     update_hanging_file(dst, src);
 }
 
+
+// Consente l'invio di un file verso un device destinatario
 void send_file(char* path, int device){
     FILE *file;
     char cmd[100];
@@ -893,6 +909,14 @@ int main(int argc, char* argv[]){
 
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
+
+                            // Se l'utente ha sbagliato le credenziali (0) oppure era già online (-2)
+                            // è necessario eliminare la connessione in essendo questa stata stabilita
+                            if (ret == -2 || ret == 0){
+                                close_connection_by_socket(&con, i);
+                                FD_CLR(i, &master);
+                            }
+
                             break;
 
                         case ISONLINE_CODE:
