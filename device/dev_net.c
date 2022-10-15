@@ -228,14 +228,14 @@ int send_device_request(int fd, char buffer[MAX_REQUEST_LEN]){
     bytes_to_send = MAX_REQUEST_LEN;
     while(bytes_to_send > 0) {
         sent_bytes = send(fd, (void*) buf, bytes_to_send, 0);
-            if(sent_bytes == -1 || sent_bytes == 0){
-                perror("errore invio");
-                slog("ERRORE INVIO");
-                return -1;
-            } 
+        if(sent_bytes == -1 || sent_bytes == 0){
+            slog("ERRORE INVIO %d, inviati: %d", fd, sent_bytes);
+            perror("errore invio richiesta device");
+            return -1;
+        } 
             
-            bytes_to_send -= sent_bytes;
-            buf += sent_bytes;
+        bytes_to_send -= sent_bytes;
+        buf += sent_bytes;
     }
 
     return sent_bytes;
@@ -256,7 +256,11 @@ int send_request(int code, int fd, char buffer[MAX_REQUEST_LEN]){
 
 // MACRO per inviare una richiesta a un server
 int send_server_request(char buffer[MAX_REQUEST_LEN]){
-    return send_device_request(sd, buffer);
+    if(FD_ISSET(sd, &master)){
+        return send_device_request(sd, buffer);
+    }
+
+    return -1;
 }
 
 // MACRO per la ricezione di richieste dal server
@@ -443,7 +447,6 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
     char buffer[MAX_REQUEST_LEN];   // buffer per le richieste
     int response;                   // salva il codice di risposta della richiesta
     char address[50];               // salva l'indirizzo in cui trovare il device
-    //int dest_port;                  // porta in cui contattare il device
     int fd;                         // file descriptor
     struct sockaddr_in addr;        // indirizzo della futura connessione
     struct connection* newcon;      // puntatore alla connessione creata
@@ -459,7 +462,9 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
 
     // mando una richiesta di informazioni sullo stato dell'utente
     sprintf(buffer, "%d %s", CREATECON_CODE, dst);
-    send_server_request(buffer);
+    ret = send_server_request(buffer);
+    if(ret < 0) return NULL;
+
     slog("[NET->SERVER]: %s", buffer);
 
 
@@ -577,6 +582,7 @@ int send_pendant_to_server(char dst[MAX_USERNAME_SIZE], char msg[MAX_MSG_SIZE]){
     sprintf(buffer, "%d %s %s", PENDANTMSG_CODE, dst, msg);
     ret = send_server_request(buffer);
     
+    
     return ret;
 }
 
@@ -617,14 +623,13 @@ int send_msg(char* buffer){
             // slog("la connessione è appena stata stabilita");
             notify("L'utente è attualmente online", ANSI_COLOR_GREEN);
             ret = send_request(CHAT_CODE, dst_connection->socket, msg);
-            // slog("il messaggio l'ho mandato %d", ret);
         }
     }
 
     // connessione trovata perchè creata precedentemente
     else {
         slog("questa è una connessione precedente");
-        //slog("in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
+        slog("--> in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
         ret = send_request(CHAT_CODE, dst_connection->socket, msg);
     }
 
@@ -838,10 +843,12 @@ void gui_handler(){
         
         // CHECK ONLINE REQUEST
         case ISONLINE_CODE:
-            ret = send_server_request(read_buffer);
+            /*ret = send_server_request(read_buffer);
             if(ret < 0) break;
 
-            ret = recive_code_from_server();
+            ret = recive_code_from_server();*/
+            // nota: buffer contiene il nome utente
+            ret = find_connection(&con, buffer) != NULL ? 1 :  0;
             break;
 
         // SEND MESSAGE REQUEST
@@ -926,7 +933,7 @@ void startNET(){
             // se il socket i è settato,
             // analizzo la richiesta
             if(FD_ISSET(i, &readers)){
-                slog("[NET:%d] arrivata richiesta %d", con->port, i);
+                slog("[NET:%d] intercettato socket %d", con->port, i);
 
                 // [GUI-HANDLER] se la gui mi ha inviato un messaggio
                 if(i == to_parent_fd[0]){      
@@ -989,8 +996,8 @@ void startNET(){
                         sprintf(formatted_msg, "%s si è appena collegato", get_username_by_connection(&con, fd));
                         notify(formatted_msg, ANSI_COLOR_GREEN);
 
-                        // TODO aggiornare la cronologia per il device
-                        show_request_server(username); // la cronologia ora dovrebbe essere aggiornata
+                        
+                        show_request_server(username);
                         show_as_p2p(fd);
                     }
                     

@@ -213,6 +213,7 @@ int login_limit(){
 
 
 // verifica se un utente è online
+// TODO: deve diventare un "check user connected"
 short int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
     char buffer[MAX_REQUEST_LEN];
     int ret;
@@ -268,12 +269,13 @@ void printChatHeader(char *dest){
     printf("\n");
 }
 
-void send_msg_to_net(char *dst, char *msg){
+int send_msg_to_net(char *dst, char *msg){
     char buffer[MAX_REQUEST_LEN];
     
     sprintf(buffer, "%d %s %s", SENDMSG_CODE, dst, msg);
     slog("[GUI->NET]: %s", buffer);
-    send_request_to_net(buffer);
+    ret = send_request_to_net(buffer);
+    return ret;
 }
 
 
@@ -417,11 +419,19 @@ int show(char *mittente){
 
 // stampa il visualizzato in base allo stato che gli viene passato
 void print_view_mark(int status){
-    printf("\033[0;32m [*");
-        if (status >0) 
-            printf("*]\033[0m\n");
-        else 
-            printf("]\033[0m\n");
+        // messaggio inviato ma non recapitato
+        if (status > 0) 
+            printf(ANSI_COLOR_GREEN " [*]" ANSI_COLOR_RESET);
+
+        // messaggio non inviato perchè server offline
+        else if (status == -2)
+            printf(ANSI_COLOR_RED " [x]" ANSI_COLOR_RESET);
+
+        // messaggio recapitato perchè utente online
+        else
+            printf(ANSI_COLOR_GREEN " [**]" ANSI_COLOR_RESET);
+
+        printf("\n");
 }
 
 
@@ -588,13 +598,21 @@ void startGUI(){
 
                             // costtruisco il messaggio formattato
                             format_msg(formatted_msg, con->username, msg);
-
                             printf(formatted_msg);                  // stampa a schermo
-                            status = checkUserOnline(user);        
-                            print_view_mark(status);
 
-                            send_msg_to_net(user, msg);     // invia al network la richiesta di invio messaggio, 
-                                                            // e risponde segnalando se è stato recapitato direttamente o al server
+                            ret = send_msg_to_net(user, msg);       // invia al network la richiesta di invio messaggio, 
+                                                                    // e risponde segnalando se è stato recapitato direttamente o al server
+
+                            // se il messaggio è stato inviato correttamente
+                            // mostro a schermo le spunte di successo
+                            if(ret > 0){
+                                status = checkUserOnline(user);        
+                                print_view_mark(status);
+                            }
+                            else {
+                                print_view_mark(-2);
+                            }
+                            
 
                             // mostro il messaggio formattato
                             fflush(stdout);                 // forzo l'output
