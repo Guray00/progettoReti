@@ -30,8 +30,8 @@
 #define WHOIS_CODE        103
 #define QUITCHAT_CODE     104
 
-
 #define ISONLINE_CODE     200
+#define AVAILABLE_CODE    201
 // =================================
 
 #define DEBUG               1
@@ -44,13 +44,16 @@
                                                        //        - SPACING - INT (CODE)
 #define MAX_MSG_SIZE        MAX_REQUEST_LEN - MAX_USERNAME_SIZE  - 2       - 4
  
-
+// FILES =================================
 #define FILE_REGISTER       "registro.txt"
 #define FILE_USERS          "utenti.txt"
 #define TMP_FILE_REGISTER   "tmp.txt"
 #define TMP_FILE            "tmp.txt"
 #define HANGING_FILE        "hanging"
 #define SHOW_FILE           "show"
+#define CONTACTS_FILE       "contacts"
+#define AVAILABLE_FILE      "available"
+// =======================================
 
 #define PORT_NOT_KNOWN       0000
 

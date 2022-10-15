@@ -308,11 +308,11 @@ int find_entry_users(char* username) {
 
 /* port: utente online
       0: utente offline
-     -1: utente non trovato   */
+     -2: utente non trovato   */
 short int isOnline(char *username){
     FILE *file;
     char usr[MAX_USERNAME_SIZE];
-    int res = -1;
+    int res = -2;
     
     int p;
     unsigned long lout, lin;

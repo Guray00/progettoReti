@@ -756,6 +756,108 @@ int show_request_server(char *mittente){
     return 0;
 }
 
+// verifica chiedendo al server quali utenti presenti
+// in rubrica siano effettivamente online
+int available_request_server(){
+    char available_path[100], contacts_path[100], dirpath[100], cmd[100], buffer[MAX_REQUEST_LEN];
+    FILE *available, *contacts;
+
+    char *line = NULL;
+    ssize_t read;
+    size_t l;
+
+    // recupero il path relativo al file dei contatti
+    sprintf(available_path, "./devices_data/%s/%s", con->username, AVAILABLE_FILE);
+    sprintf(contacts_path,  "./devices_data/%s/%s", con->username, CONTACTS_FILE);
+    strcpy(dirpath, contacts_path);    
+    dirname(dirpath);
+
+    // se i file non esistono li genero
+    sprintf(cmd, "mkdir -p %s && touch %s && touch %s", dirpath, contacts_path, available_path); 
+    system(cmd);
+
+    //line[strcspn(line, "\n")] = 0;
+
+    available = fopen(available_path, "w");
+    contacts  = fopen(contacts_path,  "r");
+    if(available < 0 || contacts < 0){
+        perror("Non è stato possibile aprire i file");
+        return -1;
+    }
+
+    // leggo ogni utente dal file dei contatti
+    while((read=getline(&line, &l, contacts)) != -1){
+
+        line[strcspn(line, "\n")] = 0;
+
+        sprintf(buffer, "%d %s", ISONLINE_CODE, line);
+        slog("richiedo per: %s", buffer);
+        ret = send_server_request(buffer);
+        if (ret == -1) break;
+
+        ret = recive_code_from_server();
+        if (ret == -1) break;
+
+        // se l'utente risulta online, lo scrivo tra i disponibili
+        if (ret > 0){
+            fprintf(available, line);
+            fprintf(available, "\n");
+
+            // informo che tutto è andato correttamente
+            ret = 0;
+        }
+    }
+
+    // chiudo il file
+    fclose(available);
+    fclose(contacts);
+
+    return ret;
+}
+
+int print_available(){
+    char path[100];
+
+    FILE *file;
+    char *line = NULL;
+    ssize_t read;
+    size_t l;
+    unsigned short int flag = 0;
+
+    sprintf(path, "./devices_data/%s/%s", con->username, AVAILABLE_FILE);
+
+    file     = fopen(path, "r");
+    if(file < 0){
+        perror("errore apertura file");
+        return -1;
+    }
+
+    printf("\n");
+    print_separation_line();
+    printf("Gli utenti attualmente %sdisponibili%s sono:\n", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);
+
+    // mostro a schermo il parsing del contenuto del file
+    while((read=getline(&line, &l, file)) != -1){
+        line[strcspn(line, "\n")] = 0;
+
+        // mostro solo gli utenti online non partecipanti
+        if(find_connection(&partecipants, line) == NULL){
+            flag = 1;
+            printf("- %s%s%s\n", ANSI_COLOR_GREEN, line, ANSI_COLOR_RESET);
+        }
+    }
+
+    if(!flag){
+        printf("Attenzione: %snessun utente%s attualmente disponibile.\n", ANSI_COLOR_RED, ANSI_COLOR_RESET);
+    }
+
+    print_separation_line();
+    printf("\n");
+
+    // chiudo il file
+    fclose(file); 
+    return 0;  
+}
 
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
@@ -877,6 +979,14 @@ void gui_handler(){
             //strcpy(SCENE, "");
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
+            break;
+
+        case AVAILABLE_CODE:
+            ret = available_request_server();
+            if (ret == -1) break;
+
+            // mostro a schermo il risultato
+            ret = print_available();
             break;
 
         // BAD REQUEST

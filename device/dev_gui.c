@@ -212,8 +212,7 @@ int login_limit(){
 }
 
 
-// verifica se un utente è online
-// TODO: deve diventare un "check user connected"
+// verifica se un utente è già parte dei partecipanti
 short int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
     char buffer[MAX_REQUEST_LEN];
     int ret;
@@ -419,21 +418,30 @@ int show(char *mittente){
 
 // stampa il visualizzato in base allo stato che gli viene passato
 void print_view_mark(int status){
-        // messaggio inviato ma non recapitato
+        // messaggio recapitato
         if (status > 0) 
-            printf(ANSI_COLOR_GREEN " [*]" ANSI_COLOR_RESET);
+            printf(ANSI_COLOR_GREEN " [**]" ANSI_COLOR_RESET);
 
         // messaggio non inviato perchè server offline
         else if (status == -2)
             printf(ANSI_COLOR_RED " [x]" ANSI_COLOR_RESET);
 
-        // messaggio recapitato perchè utente online
+        // messaggio non recapitato perchè utente offline
         else
-            printf(ANSI_COLOR_GREEN " [**]" ANSI_COLOR_RESET);
+            printf(ANSI_COLOR_GREEN " [*]" ANSI_COLOR_RESET);
 
         printf("\n");
 }
 
+// invia al network una richiesta di verifica di quali utenti
+// sono attualmente raggiungibili tra quelli presenti in rubrica
+int available_request_to_net(){
+    char buffer[MAX_REQUEST_LEN];
+
+    sprintf(buffer, "%d", AVAILABLE_CODE);
+    ret = send_request_to_net(buffer);
+    return ret;
+}
 
 
 // MAIN DELLA GUI
@@ -588,13 +596,13 @@ void startGUI(){
                         msg_size = strcspn(msg, "\n");
                         msg[msg_size] = 0;
 
+                        // cancello la riga precendente (messaggio scritto dall'utente)
+                        printf("\033[A\r\33[2K");  
+                        fflush(stdout);
 
                         // se il contenuto non è vuoto mando
                         // il messaggio al mittente
-                        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0){
-
-                            // cancello la riga precendente (messaggio scritto dall'utente)
-                            printf("\033[A\r\33[2K");   
+                        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 ){
 
                             // costtruisco il messaggio formattato
                             format_msg(formatted_msg, con->username, msg);
@@ -616,6 +624,14 @@ void startGUI(){
 
                             // mostro il messaggio formattato
                             fflush(stdout);                 // forzo l'output
+                        }
+
+                        // se viene chiesto di mostrare gli utenti in rubrica online
+                        else if(strcmp(msg, "\\u") == 0){
+                            ret = available_request_to_net();
+                            if (ret == -1){
+                                printf(ANSI_COLOR_RED "Comando non disponibile: impossibile contattare il server al momento\n\n" ANSI_COLOR_RESET);
+                            }
                         }
 
                     } while(strcmp(msg, "\\q") != 0);
