@@ -41,7 +41,7 @@
 
 // utile per mantenere le informazioni
 // sulle connessioni in corso
-struct connection con;
+struct connection *con;
 
 // ==============================================
 
@@ -154,7 +154,7 @@ void intHandler() {
     }*/
 
     // per ogni device connesso notifico la disconnesione
-    for (p = con.next; p!=NULL; ){
+    for (p = con->next; p!=NULL; ){
 
         // invio la richiesta di disconnessione
         slog("mando richiesta disconnesione su socket %d", p->socket);
@@ -166,7 +166,7 @@ void intHandler() {
 
             // se è andata a buon fine termino l'iesimo socket
             // e rimuovo dalla struttura dati la connessione
-            p = close_connection(p);
+            p = close_connection(&p);
         }
     }
 
@@ -810,11 +810,12 @@ int main(int argc, char* argv[]){
     if(sd > fd_max) fd_max = sd;
 
     // inizializzo la lista di connessioni
-    con.socket = sd;
-    con.prev = NULL;
-    con.next = NULL;
-    strcpy(con.username, "server");
-    con.port = port;
+    con = (void*) malloc(sizeof(struct connection));
+    con->socket = sd;
+    con->prev = NULL;
+    con->next = NULL;
+    strcpy(con->username, "server");
+    con->port = port;
 
     while(1){
 

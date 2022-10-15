@@ -27,11 +27,14 @@
 extern int to_child_fd[2];      // pipe NET->GUI
 extern int to_parent_fd[2];     // pipe GUI->NET
 extern int pid;                 // pid del processo
-extern struct connection con;   // informazioni sulla connessione
 extern int DEVICE_PORT;
 char SCENE[MAX_USERNAME_SIZE];
 
-struct timeval timeout;      
+// informazioni sulle connessioni attive
+extern struct connection *con;   
+
+// tiene traccia di tutti gli utenti presenti all'interno di una chat
+struct connection *partecipants = NULL;
 // ==========================================================================
 
 // GLOBAL ===================================================================
@@ -81,21 +84,21 @@ void logout_devices(){
     // de device
     // print_connection(&con);
     //sleep(1);
-    for (p = con.next; p != NULL; p = next){
+    for (p = con->next; p != NULL; p = next){
 
         // salvo il puntatore al prossimo elemento
         next = p->next;
 
         // genero la richiesta
         slog("===> STO CONTATTANDO: %s(%d)", p->username, p->socket);
-        sprintf(buffer, "%d %s", LOGOUT_CODE, con.username);
+        sprintf(buffer, "%d %s", LOGOUT_CODE, con->username);
 
         // invio la richiesta al device
         ret = send(p->socket, (void *) buffer, sizeof(buffer), 0);
         if(ret > 0){
             // se è andata a buon fine termino
             FD_CLR(p->socket, &master);
-            close_connection(p);
+            close_connection(&p);
         }   
         else {
             perror("qualcosa è andato storto");
@@ -114,7 +117,7 @@ void logout_server(){
     short int code = LOGOUT_CODE;
 
     // genero la richiesta di disconnessione dal server
-    sprintf(buffer, "%d %s", code, con.username);
+    sprintf(buffer, "%d %s", code, con->username);
     ret = send(sd, (void *) buffer, sizeof(buffer), 0);
     if(ret > 0){
         // se è andata a buon fine termino
@@ -146,7 +149,7 @@ int init_listen_socket(int port){
     }
 
     // imposto il socket di ascolto
-    //con.socket = listener;
+    //con->socket = listener;
 
     // salvo il mio indirizzo per ricevere le richieste
     memset(&myaddr, 0, sizeof(myaddr)); // pulizia
@@ -334,6 +337,7 @@ void server_handler(){
 
             // rimuovo il server dai socket ascoltati
             FD_CLR(sd, &master);
+            close(sd);
 
             break;
     }
@@ -347,10 +351,11 @@ void recive_p2p_msg(int device, char *buffer){
     char formatted_msg[MAX_REQUEST_LEN];
 
     // genero la richiesta per la gui
-    // slog("SCENE VALE: %s", SCENE);
     strcpy(src, get_username_by_connection(&con, device));
 
-    if (strcmp(src, SCENE) == 0){
+    //if (strcmp(src, SCENE) == 0){
+    // se trovo l'utente tra i partecipanti
+    if (find_connection(&partecipants, src) != NULL){
         format_msg(formatted_msg, src, buffer);
         printf("%s\n", formatted_msg);
     }
@@ -369,7 +374,7 @@ int append_msg_to_historic(char *mittente, char* msg){
     char historic_path[100];
     FILE  *historic;
 
-    sprintf(historic_path, "./devices_data/%s/%s.txt", con.username, mittente);
+    sprintf(historic_path, "./devices_data/%s/%s.txt", con->username, mittente);
     historic = fopen(historic_path, "a");
     if(historic < 0){
         perror("errore apertura file");
@@ -498,7 +503,7 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
         if(fd > fdmax) fdmax = fd;
 
         // genero la richiesta di verifica hash e la invio al nuovo dispositivo
-        sprintf(buffer, "%s %lu", con.username, my_hash);
+        sprintf(buffer, "%s %lu", con->username, my_hash);
         slog("HO CONFEZIONATO: %s", buffer);
         send_device_request(fd, buffer);
 
@@ -509,7 +514,7 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
 
         // la connessione tra i device è avvenuta,
         // aggiungo alla lista delle connessioni
-        slog("[NET:%d] connessione tra i device avvenuta", con.port);
+        slog("[NET:%d] connessione tra i device avvenuta", con->port);
 
         return newcon;
     }
@@ -536,7 +541,7 @@ void show_as_p2p(int fd){
 
 
     // creo le cartelle e i file necessari (in locale) per show
-    sprintf(path, "./devices_data/%s/%s", con.username, SHOW_FILE);
+    sprintf(path, "./devices_data/%s/%s", con->username, SHOW_FILE);
 
 
     // Il file è stato ricevuto, è compito allora del network aggiornare
@@ -584,7 +589,7 @@ int send_msg(char* buffer){
 
     // ricavo il messaggio e il destinatario
     sscanf(buffer, "%s %[^\n\t]", dst, msg);
-    slog("[NET:%d] vuole scrivere a %s", con.port, dst);
+    slog("[NET:%d] vuole scrivere a %s", con->port, dst);
     
     // verifico se esiste una connessione precedente con il device
     dst_connection = find_connection(&con, dst);
@@ -676,7 +681,7 @@ int hanging_request_server(){
 
 
     // creo le cartelle e i file necessari (in locale) per l'hanging
-    sprintf(path, "./devices_data/%s/%s", con.username, HANGING_FILE);
+    sprintf(path, "./devices_data/%s/%s", con->username, HANGING_FILE);
 
 
     // mando la richiesta di hanging
@@ -708,7 +713,7 @@ int show_request_server(char *mittente){
 
 
     // creo le cartelle e i file necessari (in locale) per show
-    sprintf(path, "./devices_data/%s/%s", con.username, SHOW_FILE);
+    sprintf(path, "./devices_data/%s/%s", con->username, SHOW_FILE);
 
     // mando la richiesta di show [CODE] [USERNAME]
     ret = send_request(SHOW_CODE, sd, mittente);
@@ -721,7 +726,7 @@ int show_request_server(char *mittente){
     // Il file è stato ricevuto, è compito allora del network aggiornare
     // in modo sensato i file locali. Devono essere aggiunti i nuovi messaggi
     // alla cronologia della chat caricata
-    sprintf(historic_path, "./devices_data/%s/%s.txt", con.username, mittente);
+    sprintf(historic_path, "./devices_data/%s/%s.txt", con->username, mittente);
     historic = fopen(historic_path, "a");
     file     = fopen(path, "r");
     if(file < 0 || historic < 0){
@@ -787,9 +792,9 @@ void gui_handler(){
             if (ret < 0) break;
             
             // recupero password e porta
-            sprintf(read_buffer, "%s|%d", read_buffer, con.port);
+            sprintf(read_buffer, "%s|%d", read_buffer, con->port);
             args = strtok(buffer, "|");
-            strcpy(con.username, args);
+            strcpy(con->username, args);
             args = strtok(NULL, "|");
 
             // invio la richiesta di accesso al server
@@ -812,10 +817,10 @@ void gui_handler(){
                 break;
 
             // genero il mio hash al login
-            sprintf(hash_buffer,"%s %s", con.username, args);
+            sprintf(hash_buffer,"%s %s", con->username, args);
             my_hash = hash(hash_buffer);
 
-            //slog("IL MIO HASH [%s][%s | %s]: %lu", read_buffer, con.username, args, my_hash);
+            //slog("IL MIO HASH [%s][%s | %s]: %lu", read_buffer, con->username, args, my_hash);
             break;
 
         case CHAT_CODE:
@@ -823,7 +828,12 @@ void gui_handler(){
             ret = show_request_server(buffer);
             if(ret < 0) break;
 
-            strcpy(SCENE, buffer);
+            // nota: nel buffer è presente il nome utente
+            // TODO: controllare se il partecipante esiste realmente
+            //strcpy(SCENE, buffer);
+
+            // aggiungo il partecipante alla lista
+            new_passive_connection(&partecipants, buffer);
             break;
         
         // CHECK ONLINE REQUEST
@@ -832,7 +842,6 @@ void gui_handler(){
             if(ret < 0) break;
 
             ret = recive_code_from_server();
-            slog("DENTRO RET: %d <--------", ret);
             break;
 
         // SEND MESSAGE REQUEST
@@ -851,14 +860,16 @@ void gui_handler(){
             break;
 
         case LOGOUT_CODE:
-            slog("[GUI->NET:%d] ricevuto richiesta di disconnessione", con.port);
+            slog("[GUI->NET:%d] ricevuto richiesta di disconnessione", con->port);
             logout_devices();
             logout_server();
             slog("ho fatto il logout");
             break;
 
         case QUITCHAT_CODE:
-            strcpy(SCENE, "");
+            //strcpy(SCENE, "");
+            // rimuovo tutti gli utenti partecipanti alla chat
+            clear_connections(&partecipants);
             break;
 
         // BAD REQUEST
@@ -883,7 +894,6 @@ void startNET(){
 
     // Inizializzo i socket
     init_listen_socket(DEVICE_PORT);
-    
 
     // pulizia di master
     FD_ZERO(&master);    
@@ -916,7 +926,7 @@ void startNET(){
             // se il socket i è settato,
             // analizzo la richiesta
             if(FD_ISSET(i, &readers)){
-                slog("[NET:%d] arrivata richiesta %d", con.port, i);
+                slog("[NET:%d] arrivata richiesta %d", con->port, i);
 
                 // [GUI-HANDLER] se la gui mi ha inviato un messaggio
                 if(i == to_parent_fd[0]){      

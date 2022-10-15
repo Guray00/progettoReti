@@ -5,7 +5,7 @@ all: dev serv
 
 # make rule per il client
 dev: dev.o
-	gcc -Wall ./device/*.c ./API/logger.c ./utils/costanti.h ./utils/connection.c -o dev
+	gcc -Wall dev.o ./device/*.c ./API/logger.c ./utils/costanti.h ./utils/connection.c -o dev
 
 # make rule per il server
 serv: serv.o

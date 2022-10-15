@@ -16,10 +16,10 @@ modalità non avvengono, essendo il device sempre attivo fin quando funziona).
 */
 
 // restituisce un puntatore relativo a un utente passato mediante username
-struct connection* find_connection(struct connection *head, char dst[MAX_USERNAME_SIZE]){
+struct connection* find_connection(struct connection **head, char dst[MAX_USERNAME_SIZE]){
     struct connection *p;
 
-    for (p = head; p != NULL; p = p->next){
+    for (p = *head; p != NULL; p = p->next){
 
         // se trovo un utente con lo stesso nome 
         // mi sono già connesso in passato, verifico
@@ -32,31 +32,71 @@ struct connection* find_connection(struct connection *head, char dst[MAX_USERNAM
     return NULL;
 }
 
-// consente la chiusura di una connessione paddando il puntatore
-// alla connessione attuale
-struct connection* close_connection(struct connection *con){
+// trova una connessione a partire dal socket
+struct connection* find_connection_by_socket(struct connection **head, int fd){
+    struct connection *p;
+
+    for (p = *head; p != NULL; p = p->next){
+
+        // se trovo un utente con lo stesso nome 
+        // mi sono già connesso in passato, verifico
+        // se posso correttamente comunicarci
+        if(fd == p->socket){
+            return p;
+        }
+    }
+
+    return NULL;
+}
+
+// Rimuove una connessione dalla lista, senza chiuderla
+struct connection* remove_connection(struct connection **con){
     struct connection* next;
 
-    // chiudo la connessione
-    close(con->socket);
+    // se l'lemento è NULL, ritorno NULL
+    if (*con == NULL) return NULL;
 
     // elimino la connessione dalla lista
-    next = con->next;
-    if(next) next->prev = con->prev;       
-    (con->prev)->next = con->next;
+
+    // salvo un puntatore al prossimo elemento
+    next = (*con)->next;
+
+    // se il prossimo elemento esiste, imposto che punti al mio precedente
+    if(next)      next->prev = (*con)->prev;   
+
+    // se il precedente esiste, imposto che punti al mio successivo    
+    if((*con)->prev) ((*con)->prev)->next = next;
 
     // libero la memoria
-    free(con);
+    free(*con);
 
+    // restituisco un puntatore al prossimo elemento
+    return next;
+}
+
+// consente la chiusura di una connessione paddando il puntatore
+// alla connessione attuale
+struct connection* close_connection(struct connection **con){
+    struct connection* next;
+
+    if ((*con) == NULL) return NULL;
+
+    // chiudo la connessione
+    close((*con)->socket);
+
+    // elimino la connessione dalla lista
+    next = remove_connection(con);
+
+    // ritorno un puntatore all'elemento che segue
     return next;
 }
 
 
 // passato un indice di un socket, chiude la connessione
-struct connection* close_connection_by_socket(struct connection *head, int sock){
+struct connection* close_connection_by_socket(struct connection **head, int sock){
     struct connection *next, *tmp;
 
-    tmp = head;
+    tmp = *head;
     while(tmp!=NULL){
 
         // quando trovo la connessione con il socket desiderato
@@ -83,31 +123,48 @@ struct connection* close_connection_by_socket(struct connection *head, int sock)
 }
 
 
-struct connection* new_connection(struct connection* head, int sock){
+struct connection* new_connection(struct connection** head, int sock){
     struct connection *tmp, *tail;
+
+    // controllo prima di inserire se esiste già un socket connesso
+    // nota: se il socket passato è -1, non serve cercare perchè significa
+    // che non vi è una connessione attiva ma si ha comunque l'utente nella lista
+    if (sock != -1 && find_connection_by_socket(head, sock) != NULL) {
+        return find_connection_by_socket(head, sock);
+    }
 
     tmp = (void*) malloc(sizeof(struct connection));
     tmp->socket = sock;
-
-    tail = head;
-    while(tail->next != NULL) tail = tail->next;
-
-    tail->next = tmp;
-    tmp->prev = tail;
     tmp->next = NULL;
-
     strcpy(tmp->username, "undefined");
+
+    tail = *head;
+
+    // se la testa è NULL, sostituisco in testa
+    if (tail == NULL){
+        tmp->prev = NULL;
+        *head = tmp;
+    } 
+    
+    // altrimenti se la testa è presente inserisco in coda
+    else {
+        while(tail->next != NULL) tail = tail->next;
+
+        tail->next = tmp;
+        tmp->prev = tail;
+    }
+
+    
     return tmp;
 }
 
 
 // assegno un username all'utente con socket "socket"
-void set_connection(struct connection* head, char username[MAX_USERNAME_SIZE], int socket){
+void set_connection(struct connection** head, char username[MAX_USERNAME_SIZE], int socket){
     struct connection *tmp;
 
-    tmp = head;
+    tmp = *head;
     while(tmp!=NULL){
-        //printf("scorro %d", tmp->socket);
         if (tmp->socket == socket){
             strcpy(tmp->username, username);
             break;
@@ -118,10 +175,10 @@ void set_connection(struct connection* head, char username[MAX_USERNAME_SIZE], i
 
 }
 
-char* get_username_by_connection(struct connection* head, int sock){
+char* get_username_by_connection(struct connection** head, int sock){
     struct connection *tmp;
 
-    tmp = head;
+    tmp = *head;
 
     while(tmp!=NULL){
         if (tmp->socket == sock){
@@ -135,13 +192,57 @@ char* get_username_by_connection(struct connection* head, int sock){
     return NULL;
 }
 
-void print_connection(struct connection* head){
+void print_connection(struct connection** head){
 
     struct connection* tmp;
-    for(tmp = head->next; tmp != NULL; tmp = tmp->next){
+    for(tmp = *head; tmp != NULL; tmp = tmp->next){
         printf("[%s(%d)]->", tmp->username, tmp->socket);
     }
 
     printf("[NULL]\n\n");
     fflush(stdout);
+}
+
+// cancella (senza chiudere) tutte le connessioni dalla lista
+void clear_connections(struct connection** head){
+    struct connection* next;
+
+    while(*head != NULL){
+        next = remove_connection(head);
+        (*head) = next;
+    }
+
+}
+
+// dato il nome di un utente, si aggiorna il suo socket
+struct connection* new_passive_connection(struct connection** head, char *name){
+    struct connection *tmp, *tail;
+
+    // evito i duplicati
+    if (find_connection(head, name)) {
+        return find_connection(head, name);
+    }
+
+    tmp = (void*) malloc(sizeof(struct connection));
+    tmp->socket = -1;
+    tmp->next = NULL;
+    strcpy(tmp->username, name);
+
+    tail = *head;
+
+    // se la testa è NULL, sostituisco in testa
+    if ( (*head) == NULL){
+        *head = tmp;
+    } 
+    
+    // altrimenti se la testa è presente inserisco in coda
+    else {
+        while(tail->next != NULL) tail = tail->next;
+
+        tail->next = tmp;
+        tmp->prev = tail;
+    }
+
+    
+    return tmp;
 }

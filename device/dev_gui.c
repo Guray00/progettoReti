@@ -25,7 +25,9 @@
 extern int to_child_fd[2];
 extern int to_parent_fd[2];
 extern int pid;
-extern struct connection con;
+
+// tiene traccia di tutte le connessioni attive
+extern struct connection* con;
 // ========================
 
 // memorizza lo status di loggato o meno
@@ -260,7 +262,7 @@ void printChatHeader(char *dest){
 
     system("clear");
     print_separation_line(); // ***
-    sprintf(header, "%s ⟶  %s", con.username, dest);
+    sprintf(header, "%s ⟶  %s", con->username, dest);
     print_centered(header);
     print_separation_line(); // ***
     printf("\n");
@@ -299,7 +301,7 @@ int hanging(){
     print_header("HANGING");
 
     // recupero il path del file
-    sprintf(path, "./devices_data/%s/%s", con.username, HANGING_FILE);
+    sprintf(path, "./devices_data/%s/%s", con->username, HANGING_FILE);
     file = fopen(path, "r");
 
     // mostro a schermo il parsing del contenuto del file
@@ -329,7 +331,7 @@ int hanging(){
 
     // mostro nuovamente a schermo il vecchio menu
     system("clear");
-    print_logged_menu(con.username, con.port);
+    print_logged_menu(con->username, con->port);
     //fstdin();   // pulisco l'input
 
     return 0;
@@ -384,7 +386,7 @@ int show(char *mittente){
     print_header(header);
 
     // creo il path del file
-    sprintf(path, "./devices_data/%s/%s",     con.username, SHOW_FILE);
+    sprintf(path, "./devices_data/%s/%s",     con->username, SHOW_FILE);
     file = fopen(path, "r");
     if(file < 0){
         perror("errore apertura file");
@@ -409,7 +411,7 @@ int show(char *mittente){
 
     // mostro nuovamente a schermo il vecchio menu
     system("clear");
-    print_logged_menu(con.username, con.port);
+    print_logged_menu(con->username, con->port);
     return 0;
 }
 
@@ -514,14 +516,14 @@ void startGUI(){
                         STATUS = ONLINE;
 
                         // setup della connessione
-                        strcpy(con.username, user);                     // copio il nome
+                        strcpy(con->username, user);                     // copio il nome
 
                         printf("Utente connesso correttamente!\n");     // mostro a schermo login riuscito
                         fflush(stdout);
                         
                         sleep(1);                                       // aspetto un secondo
                         system("clear");                                // pulisco la shell
-                        print_logged_menu(con.username, con.port);
+                        print_logged_menu(con->username, con->port);
                     }
 
                     else if(ret == 0)
@@ -543,7 +545,7 @@ void startGUI(){
                     }   
 
                     // controllo che l'utente non tenti di parlare con se stesso
-                    if (strcmp(user, con.username) == 0){
+                    if (strcmp(user, con->username) == 0){
                         printf("Non puoi parlare con te stesso!\n\n");
                         break;
                     }
@@ -565,7 +567,7 @@ void startGUI(){
                     strcpy(SCENE, user);
 
                     // mostra a schermo la cronologia e ne consente l'aggiornamento
-                    print_historic(con.username, user);
+                    print_historic(con->username, user);
 
                     // prende l'input dell'utente
                     do  {
@@ -585,7 +587,7 @@ void startGUI(){
                             printf("\033[A\r\33[2K");   
 
                             // costtruisco il messaggio formattato
-                            format_msg(formatted_msg, con.username, msg);
+                            format_msg(formatted_msg, con->username, msg);
 
                             printf(formatted_msg);                  // stampa a schermo
                             status = checkUserOnline(user);        
@@ -604,7 +606,7 @@ void startGUI(){
                     sprintf(buffer, "%d", QUITCHAT_CODE);
                     send_request_to_net(buffer);
                     system("clear");    // pulisco la schermata
-                    print_logged_menu(con.username, con.port);
+                    print_logged_menu(con->username, con->port);
                     break;
 
                 case HANGING_CODE:
@@ -627,7 +629,7 @@ void startGUI(){
                     }   
 
                     // controllo che l'utente non tenti di parlare con se stesso
-                    if (strcmp(user, con.username) == 0){
+                    if (strcmp(user, con->username) == 0){
                         printf("Non puoi vedere i nuovi messaggi con te stesso!\n\n");
                         break;
                     }
