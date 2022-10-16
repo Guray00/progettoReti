@@ -80,6 +80,7 @@ void logout_device(int fd){
     
     sprintf(buffer, "%d %s", LOGOUT_CODE, "user");
     ret = send(fd, (void *) buffer, sizeof(buffer), 0);
+
     if(ret > 0){
         // se è andata a buon fine termino
         tmp = find_connection_by_socket(&con, fd);
@@ -145,6 +146,11 @@ void logout_server(){
         slog("==> chiuso socket %d", sd);
     }
     
+}
+
+void send_request_to_gui(char* buffer){
+    // NET->GUI, invio la richiesta
+    write(to_child_fd[1], buffer, MAX_REQUEST_LEN);
 }
 
 // gestione chiusura
@@ -667,7 +673,7 @@ int send_msg(char* buffer){
         // slog("AGGIUNGO ALLA CRONOLOGIA di %s il messaggio verso %s: %s", con->username, original, msg);
         // slog("=========================");
     }
-        
+
     return ret;
 }
 
@@ -892,6 +898,18 @@ int print_available(){
 }
 
 
+void switch_to_group(){
+    char buffer[MAX_REQUEST_LEN];
+    
+    system("clear");
+    print_group_chat_header();
+    GROUPMODE = 1;
+
+    // avverto la gui di avviare una chat per far avvenire l'inserimento
+    sprintf(buffer, "%hd", STARTCHAT_CODE);
+    send_request_to_gui(buffer);
+}
+
 int send_group_invite(struct connection *dst){
 
     ret = send_request(INVITEGROUP_CODE, dst->socket, "");
@@ -899,6 +917,7 @@ int send_group_invite(struct connection *dst){
 
     // 0 se rifiuta la connessione, 1 se accetta, -1 se errore
     ret = recive_code_from_device(dst->socket);
+
     return ret;
 }
 
@@ -920,8 +939,13 @@ int add_user(char *dst){
     ret = send_group_invite(c);
     if(ret <= 0) return ret;
 
+    // passo graficamente alla chat di gruppo
+    switch_to_group();
+
     // scorro tutti i partecipanti alla chat
     for(p = partecipants; p != NULL; p = p->next){
+
+        if(strcmp(p->username, dst) == 0) continue;
 
         // se la connessione con un partecipanti non è ancora 
         // presente la forzo
@@ -941,11 +965,14 @@ int add_user(char *dst){
         ret = send_device_request(c->socket, buffer);
         if (ret == -1) return -1;
 
+        sprintf(buffer, "%d", ENABLEGROUP_CODE);
+        ret = send_device_request(c->socket, buffer);
+        if (ret == -1) return -1;        
+
         slog("INOLTRATO RICHIESTA DI ADDUSER A: %s", c->username);
     }    
 
     new_passive_connection(&partecipants, dst);
-    print_connection(&partecipants);
     return 0;
 }
 
@@ -1007,19 +1034,37 @@ void device_handler(int device){
 
         // risponde alla richiesta di invito
         case INVITEGROUP_CODE:
+
             // se non è già occupato in una chat accetta l'invito
             if (connection_size(&partecipants) == 0) {
                 ret = 1;
-
-                system("clear");
-                print_group_chat_header();
+                
                 new_passive_connection(&partecipants, find_connection_by_socket(&con, device)->username);
-                GROUPMODE = 1;
+                switch_to_group(device);
             }
 
-            else ret = 0;
+            else {
+                ret = 0;
+
+            }
+
+            // restitusco l'esito dell'invito: 1 se è stato accettato, 0 se invece è stato respinto
             code = htons(ret);
             send(device, (void*) &code, sizeof(uint16_t), 0);
+
+            // il dispositivo dovrebbe fare logout
+            if(ret == 0) {
+                sprintf(buffer, "Chat di gruppo rifiutata, %s disconnesso", get_username_by_connection(&con, device));
+                notify(buffer, ANSI_COLOR_RED);
+
+                logout_device(device);
+            }
+
+            break;
+        
+        case ENABLEGROUP_CODE:
+            new_passive_connection(&partecipants, find_connection_by_socket(&con, device)->username);
+            switch_to_group();
             break;
     }
 }

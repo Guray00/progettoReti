@@ -35,6 +35,10 @@
 #define AVAILABLE_CODE    201
 #define ADDUSER_CODE      202
 #define INVITEGROUP_CODE  203
+
+// NET->GUI
+#define STARTCHAT_CODE    300
+#define ENABLEGROUP_CODE  301 // invia la richiesta di passaggio grafico a chat di gruppo
 // =================================
 
 #define DEBUG               1

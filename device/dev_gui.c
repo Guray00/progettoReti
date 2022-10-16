@@ -527,6 +527,12 @@ void start_chat(char *dst){
                         }
 
                     } while(strcmp(msg, "\\q") != 0);
+
+    // riporta al menu principale
+    sprintf(buffer, "%d", QUITCHAT_CODE);
+    send_request_to_net(buffer);
+    system("clear");    // pulisco la schermata
+    print_logged_menu(con->username, con->port);
 }
 
 
@@ -538,6 +544,15 @@ void handle_message(){
     read(to_child_fd[0], buffer, MAX_REQUEST_LEN);
     sscanf(buffer, "%hd %[^\n]", &code, buffer);
 
+    switch (code){
+    case STARTCHAT_CODE:
+        start_chat("inutile");
+        break;
+    
+    default:
+        break;
+    }
+
 }
 
 
@@ -548,13 +563,13 @@ void startGUI(){
 
         char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];
       
-        char buffer[MAX_REQUEST_LEN];
-        //int i;
+        //char buffer[MAX_REQUEST_LEN];
+        int i;
 
         // Stampa il menu delle scelte
         print_menu();
 
-        /*int fdmax = -1;
+        int fdmax = -1;
         fd_set readers, master;
 
         FD_ZERO(&master);                   // pulisco il master
@@ -564,12 +579,12 @@ void startGUI(){
         fdmax = (fileno(stdin) > fdmax) ? fileno(stdin) : fdmax;
 
         FD_SET(to_child_fd[0], &master);           // aggiungo le risposte dal server in ascolto
-        fdmax = (to_child_fd[0] > fdmax) ? to_child_fd[0] : fdmax;*/
+        fdmax = (to_child_fd[0] > fdmax) ? to_child_fd[0] : fdmax;
         
         do {
 
             //  seleziono i socket che sono attivi   
-            /*FD_ZERO(&readers);
+            FD_ZERO(&readers);
             readers = master;  
             ret = select((fdmax)+1, &readers, NULL, NULL, NULL);
             if(ret<=0){
@@ -589,7 +604,7 @@ void startGUI(){
                 handle_message();
             }
 
-            else if (i == fileno(stdin)){*/
+            else if (i == fileno(stdin)){
             
 
             // chiede l'inserimento di un comando
@@ -687,12 +702,6 @@ void startGUI(){
 
                     // porta l'utente alla schermata di inserimento messaggi
                     start_chat(user);
-
-                    // riporta al menu principale
-                    sprintf(buffer, "%d", QUITCHAT_CODE);
-                    send_request_to_net(buffer);
-                    system("clear");    // pulisco la schermata
-                    print_logged_menu(con->username, con->port);
                     break;
 
                 case HANGING_CODE:
@@ -743,8 +752,8 @@ void startGUI(){
             }
 
         if (ret == -1) printf("Non è stato possibile inviare la richiesta.\n");
-        //} // chiude if
-        //} // chiude for
+        } // chiude if
+        } // chiude for
 
         } while (1);
 
