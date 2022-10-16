@@ -8,6 +8,7 @@
 void startGUI();
 void format_msg(char *formatted_msg, char *source, char* msg);
 void print_centered(char*);
+void print_group_chat_header();
 void print_separation_line();
 void print_centered_dotted(char*);
 

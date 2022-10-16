@@ -28,13 +28,14 @@ extern int to_child_fd[2];      // pipe NET->GUI
 extern int to_parent_fd[2];     // pipe GUI->NET
 extern int pid;                 // pid del processo
 extern int DEVICE_PORT;
-char SCENE[MAX_USERNAME_SIZE];
+//char SCENE[MAX_USERNAME_SIZE];
 
 // informazioni sulle connessioni attive
 extern struct connection *con;   
 
 // tiene traccia di tutti gli utenti presenti all'interno di una chat
 struct connection *partecipants = NULL;
+unsigned short int GROUPMODE = 0;
 // ==========================================================================
 
 // GLOBAL ===================================================================
@@ -72,6 +73,23 @@ unsigned long hash(char *str){
     return hash;
 }
 
+
+void logout_device(int fd){
+    char buffer[MAX_REQUEST_LEN];
+    struct connection *tmp;
+    
+    sprintf(buffer, "%d %s", LOGOUT_CODE, "user");
+    ret = send(fd, (void *) buffer, sizeof(buffer), 0);
+    if(ret > 0){
+        // se è andata a buon fine termino
+        tmp = find_connection_by_socket(&con, fd);
+        FD_CLR(fd, &master);
+        close_connection(&tmp);
+    }   
+    else {
+        perror("qualcosa è andato storto");
+    }
+}
 
 // ATTENZIONE: questa funzione, come da nome, non effettua
 // il logout dal server bensì si limita a contattare i peer 
@@ -166,7 +184,6 @@ int init_listen_socket(int port){
     return listener;
 }
 
-
 // MACRO che instaura una connessione con il server
 int init_server_connection(int port){
 
@@ -201,6 +218,18 @@ int init_server_connection(int port){
     return 1;
 }
 
+// MACRO per la ricezione di un codice di risposta da un device
+short int recive_code_from_device(int fd){
+    short int res_code;
+    ret = recv(fd, (void*) &res_code, sizeof(res_code), 0);
+    if(ret < 0){
+        perror("Errore ricezione codice di risposta");
+        exit(-1);
+    }
+
+    res_code = ntohs(res_code);
+    return res_code;
+}
 
 // MACRO per la ricezione di un codice di risposta dal server
 short int recive_code_from_server(){
@@ -216,7 +245,6 @@ short int recive_code_from_server(){
 
     return res_code;
 }
-
 
 // Invia una richiesta a un device specificato
 int send_device_request(int fd, char buffer[MAX_REQUEST_LEN]){
@@ -347,7 +375,6 @@ void server_handler(){
     }
 }
 
-
 // gestisce l'arrivo di un messaggio P2P
 void recive_p2p_msg(int device, char *buffer){
 
@@ -370,9 +397,8 @@ void recive_p2p_msg(int device, char *buffer){
     }
 }
 
-// aggiunge in fondo alla cronologia un messaggio p2p
-int append_msg_to_historic(char *mittente, char* msg){
-
+// aggiunge in fondo alla cronologia un messaggio p2p ricevuto
+int append_received_msg_to_historic(char *mittente, char* msg){
     char formatted_msg[MAX_MSG_SIZE];
 
     char historic_path[100];
@@ -398,49 +424,32 @@ int append_msg_to_historic(char *mittente, char* msg){
     return 0;
 }
 
+// aggiunge alla cronologia un messaggio p2p inviato
+int append_sent_msg_to_historic(char *dest, char* msg){
+    char formatted_msg[MAX_MSG_SIZE];
 
-void device_handler(int device){
-    char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
-    short int code;                     // codice della richiesta effettuata
+    char historic_path[100];
+    FILE  *historic;
 
-    // ricevo dal buffer
-    recive_from_device(buffer, device);
-    sscanf(buffer, "%hd %[^\t\n]", &code, buffer);
-
-    slog("[NET -> NET] %hd %s", code, buffer);
-
-    switch(code){
-
-        // DISCONNECT REQUEST
-        case LOGOUT_CODE:
-            //slog("arrivata al net chiusura device");
-            sprintf(buffer, "%s", get_username_by_connection(&con, device));
-
-            // solo se trovo il nome stampo la notifica a schermo
-            if (strcmp(buffer, "(null)") != 0){
-                sprintf(buffer, "Utente %s disconnesso", get_username_by_connection(&con, device));
-                notify(buffer, ANSI_COLOR_RED);
-            }
-
-
-            close_connection_by_socket(&con, device);
-            FD_CLR(device, &master);
-            break;
-
-        case CHAT_CODE:
-            // NOTA: in buffer è presente il contenuto del messaggio
-
-            // gestisco graficamente la ricezione del messaggio
-            recive_p2p_msg(device, buffer);
-            
-            // il messaggio ricevuto deve anche essere scritto nella cronologia
-            append_msg_to_historic(get_username_by_connection(&con, device), buffer);
-
-            //slog("FROM %s: %s", get_username_by_connection(&con, device), buffer);
-            break;
+    sprintf(historic_path, "./devices_data/%s/%s.txt", con->username, dest);
+    historic = fopen(historic_path, "a");
+    if(historic < 0){
+        perror("errore apertura file");
+        return -1;
     }
-}
 
+    // formatto il messaggio [UTENTE] [MESSAGGIO]
+    format_msg(formatted_msg, con->username, msg);
+
+    // aggiungo alla cronologia il messaggio
+    fprintf(historic, formatted_msg);
+    fprintf(historic, "\n");
+
+    // chiudo il file
+    fclose(historic);
+    
+    return 0;
+}
 
 // stabilisce una connessione con un destinatario se non presente
 struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
@@ -509,7 +518,7 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
 
         // genero la richiesta di verifica hash e la invio al nuovo dispositivo
         sprintf(buffer, "%s %lu", con->username, my_hash);
-        slog("HO CONFEZIONATO: %s", buffer);
+        //slog("HO CONFEZIONATO: %s", buffer);
         send_device_request(fd, buffer);
 
         // aggiungo alla lista la nuova connessione
@@ -517,9 +526,15 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
         set_connection(&con, dst, fd);  // imposto il nome del nuovo socket
         newcon->port = response;        // imposto la porta
 
+        // se sono in un gruppo, accetto subito!
+        /*if (GROUPMODE == 1) {
+            new_passive_connection(&partecipants, dst);
+            slog("HO AGGIUNTO PASSIVO: %s", dst);
+        }*/
+
         // la connessione tra i device è avvenuta,
         // aggiungo alla lista delle connessioni
-        slog("[NET:%d] connessione tra i device avvenuta", con->port);
+        // slog("[NET:%d] connessione tra i device avvenuta", con->port);
 
         return newcon;
     }
@@ -536,6 +551,7 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
     return NULL;
 }
 
+// mostra i messaggi presenti in "show" come notifiche o messaggi p2p
 void show_as_p2p(int fd){
     char path[100];
 
@@ -586,56 +602,72 @@ int send_pendant_to_server(char dst[MAX_USERNAME_SIZE], char msg[MAX_MSG_SIZE]){
     return ret;
 }
 
-
 // consente l'invio di un messaggio
 int send_msg(char* buffer){
-    char dst[MAX_USERNAME_SIZE];
+    char dst[MAX_USERNAME_SIZE], original[MAX_USERNAME_SIZE];
     char msg[MAX_MSG_SIZE];
-    struct connection* dst_connection;
+    struct connection* dst_connection, *p;
 
     // ricavo il messaggio e il destinatario
-    sscanf(buffer, "%s %[^\n\t]", dst, msg);
-    slog("[NET:%d] vuole scrivere a %s", con->port, dst);
-    
-    // verifico se esiste una connessione precedente con il device
-    dst_connection = find_connection(&con, dst);
-    
-    // se non trovo nessuna connessione
-    if(dst_connection == NULL){
+    sscanf(buffer, "%s %[^\n\t]", original, msg);
+    //slog("[NET:%d] vuole scrivere a %s", con->port, dst);
 
-        // chiedo di instaurare una connessione con l'utente
-        // l'utente potrebbe però essere offline (prima o verificato
-        // se la connessione esisteva, non se può essere creata) 
-        slog("--- creo nuova connessione ---");
-        dst_connection = create_connection(dst);
+    // per ogni partecipante alla chat, invio un messaggio
+    for(p = partecipants; p != NULL; p = p->next){
 
-        // se ancora non è stato possibile realizzarla,
-        // allora l'utente è offline
-        if (dst_connection == NULL){
+        // recupero il nome del partecipante
+        strcpy(dst, p->username);
 
-            // mando il messaggio come pendente al server
-            ret = send_pendant_to_server(dst, msg);
+        // verifico se esiste una connessione precedente con il device
+        dst_connection = find_connection(&con, dst);
+
+        
+        // se non trovo nessuna connessione
+        if(dst_connection == NULL){
+
+            // chiedo di instaurare una connessione con l'utente
+            // l'utente potrebbe però essere offline (prima o verificato
+            // se la connessione esisteva, non se può essere creata) 
+            slog("--- creo nuova connessione ---");
+            dst_connection = create_connection(dst);
+
+            // se ancora non è stato possibile realizzarla,
+            // allora l'utente è offline
+            if (dst_connection == NULL){
+
+                // mando il messaggio come pendente al server
+                ret = send_pendant_to_server(dst, msg);
+            }
+
+            // la connessione adesso è stata stabilita, dunque si 
+            // manda il messaggio direttamente al socket
+            else {
+                // slog("la connessione è appena stata stabilita");
+                sprintf(buffer, "%s è attualmente online", dst);
+                notify(buffer, ANSI_COLOR_GREEN);
+                ret = send_request(CHAT_CODE, dst_connection->socket, msg);
+            }
         }
 
-        // la connessione adesso è stata stabilita, dunque si 
-        // manda il messaggio direttamente al socket
+        // connessione trovata perchè creata precedentemente
         else {
-            // slog("la connessione è appena stata stabilita");
-            notify("L'utente è attualmente online", ANSI_COLOR_GREEN);
+            slog("questa è una connessione precedente");
+            slog("--> in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
             ret = send_request(CHAT_CODE, dst_connection->socket, msg);
         }
-    }
 
-    // connessione trovata perchè creata precedentemente
-    else {
-        slog("questa è una connessione precedente");
-        slog("--> in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
-        ret = send_request(CHAT_CODE, dst_connection->socket, msg);
     }
 
     // il messaggio è ora stato inviato, deve però essere salvato nella cronologia!
-    append_msg_to_historic(dst, msg);
-
+    // Ciò però è valido solamente se la connessione è singola
+    // Nota: lo dobbiamo aggiungere solo se correttamente inviato
+    if(connection_size(&partecipants) < 2 && ret > 0){
+        append_sent_msg_to_historic(original, msg);
+        // slog("=========================");
+        // slog("AGGIUNGO ALLA CRONOLOGIA di %s il messaggio verso %s: %s", con->username, original, msg);
+        // slog("=========================");
+    }
+        
     return ret;
 }
 
@@ -859,6 +891,140 @@ int print_available(){
     return 0;  
 }
 
+
+int send_group_invite(struct connection *dst){
+
+    ret = send_request(INVITEGROUP_CODE, dst->socket, "");
+    if (ret < 0) return ret;
+
+    // 0 se rifiuta la connessione, 1 se accetta, -1 se errore
+    ret = recive_code_from_device(dst->socket);
+    return ret;
+}
+
+// funzione che consente l'aggiunta di un utente a una chat
+int add_user(char *dst){
+    struct connection *p, *c;
+    char buffer[MAX_REQUEST_LEN];
+
+    // un utente da aggiungere non può essere un utente già partecipante
+    if(find_connection(&partecipants, dst) != NULL) return -2;
+
+    // aggiungo il nuovo partecipante alla lista dei partecipanti
+    if(find_connection(&con, dst) == 0) 
+        c = create_connection(dst);
+    
+    if(c == NULL) return -2;
+    
+    // mando l'invito all'utente
+    ret = send_group_invite(c);
+    if(ret <= 0) return ret;
+
+    // scorro tutti i partecipanti alla chat
+    for(p = partecipants; p != NULL; p = p->next){
+
+        // se la connessione con un partecipanti non è ancora 
+        // presente la forzo
+        c = find_connection(&con, p->username);
+        if(c == NULL){
+            c = create_connection(dst);
+
+            // se la connessione non può essere instaurata esco
+            // nota: è il caso quando il server è offline
+            if(c == NULL) return -1;
+        }
+
+        // la connessione tra l'host e il partecipante è ora assicurata
+        // invio la richiesta di aggiunta utente al device p
+        // nota: si usa il socket su c perchè i partecipanti non hanno socket aggiornati
+        sprintf(buffer, "%d %s", ADDUSER_CODE, dst);
+        ret = send_device_request(c->socket, buffer);
+        if (ret == -1) return -1;
+
+        slog("INOLTRATO RICHIESTA DI ADDUSER A: %s", c->username);
+    }    
+
+    new_passive_connection(&partecipants, dst);
+    print_connection(&partecipants);
+    return 0;
+}
+
+// gestisce la ricezione di richiesta da altri devices
+void device_handler(int device){
+    char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
+    short int code;                     // codice della richiesta effettuata
+    struct connection *newp;            // per la richiesta di nuovo partecipante
+
+    // ricevo dal buffer
+    recive_from_device(buffer, device);
+    sscanf(buffer, "%hd %[^\t\n]", &code, buffer);
+
+    slog("[NET -> NET] %hd %s", code, buffer);
+
+    switch(code){
+
+        // DISCONNECT REQUEST
+        case LOGOUT_CODE:
+            //slog("arrivata al net chiusura device");
+            sprintf(buffer, "%s", get_username_by_connection(&con, device));
+
+            // solo se trovo il nome stampo la notifica a schermo
+            if (strcmp(buffer, "(null)") != 0){
+                sprintf(buffer, "Utente %s disconnesso", get_username_by_connection(&con, device));
+                notify(buffer, ANSI_COLOR_RED);
+            }
+
+
+            close_connection_by_socket(&con, device);
+            FD_CLR(device, &master);
+            break;
+
+        case CHAT_CODE:
+            // NOTA: in buffer è presente il contenuto del messaggio
+
+            // gestisco graficamente la ricezione del messaggio
+            recive_p2p_msg(device, buffer);
+            
+            // il messaggio ricevuto deve anche essere scritto nella cronologia, 
+            // solamente se si tratta di una chat singola
+            if (connection_size(&partecipants) < 2)
+                append_received_msg_to_historic(get_username_by_connection(&con, device), buffer);
+
+            break;
+
+        // ricezione richiesta di aggiunta a un gruppo
+        case ADDUSER_CODE:
+
+            // provo a instaurare una connessione con il nuovo utente
+            newp = create_connection(buffer);
+
+            // se la connessione non è possibile, esco
+            if (newp == NULL) break;
+
+            // altrimenti lo aggiungo ai partecipanti
+            new_passive_connection(&partecipants, buffer);
+            break;
+
+        // risponde alla richiesta di invito
+        case INVITEGROUP_CODE:
+            // se non è già occupato in una chat accetta l'invito
+            if (connection_size(&partecipants) == 0) {
+                ret = 1;
+
+                system("clear");
+                print_group_chat_header();
+                new_passive_connection(&partecipants, find_connection_by_socket(&con, device)->username);
+                GROUPMODE = 1;
+            }
+
+            else ret = 0;
+            code = htons(ret);
+            send(device, (void*) &code, sizeof(uint16_t), 0);
+            break;
+    }
+}
+
+
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
@@ -866,6 +1032,7 @@ void gui_handler(){
     char answer[4];                     // codice della risposta
     char* args;
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
+    struct connection *p;
 
     // recupero il tipo di richiesta in base al codice
     read(to_parent_fd[0], read_buffer, MAX_REQUEST_LEN);
@@ -950,7 +1117,18 @@ void gui_handler(){
 
             ret = recive_code_from_server();*/
             // nota: buffer contiene il nome utente
-            ret = find_connection(&con, buffer) != NULL ? 1 :  0;
+            /*ret = find_connection(&con, buffer) != NULL ? 1 :  0;*/
+
+            // restituisco 1 se almeno un utente ha ricevuto il messaggio
+            ret = 0;
+            for(p = partecipants; p != NULL; p = p->next){
+                
+                if(find_connection(&con, p->username) != NULL){
+                    ret = 1;
+                    break;
+                }
+            }
+
             break;
 
         // SEND MESSAGE REQUEST
@@ -968,6 +1146,7 @@ void gui_handler(){
             ret = show_request_server(buffer);
             break;
 
+        // gestisce la richiesta di disconnessione
         case LOGOUT_CODE:
             slog("[GUI->NET:%d] ricevuto richiesta di disconnessione", con->port);
             logout_devices();
@@ -975,18 +1154,27 @@ void gui_handler(){
             slog("ho fatto il logout");
             break;
 
+        // gestisce l'uscita dalla chat eleminando gli utenti dalla chat
         case QUITCHAT_CODE:
             //strcpy(SCENE, "");
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
+            GROUPMODE = 0;
             break;
 
+        // richiesta di verifica di quali utenti in rubrica sono presenti
         case AVAILABLE_CODE:
             ret = available_request_server();
             if (ret == -1) break;
 
             // mostro a schermo il risultato
             ret = print_available();
+            break;
+
+        // richiesta di aggiunta di un utente alla chat
+        case ADDUSER_CODE:
+            // buffer contiene il nome dell'utente da aggiungere
+            add_user(buffer);
             break;
 
         // BAD REQUEST
@@ -1065,9 +1253,7 @@ void startNET(){
                     char username[MAX_USERNAME_SIZE];
                     char formatted_msg[MAX_MSG_SIZE];
 
-
                     l =  sizeof(devaddr);
-
 
                     // accetto la richiesta di connessione dal nuovo device
                     memset(&devaddr, 0, sizeof(devaddr)); // pulizia
@@ -1106,6 +1292,8 @@ void startNET(){
                         sprintf(formatted_msg, "%s si è appena collegato", get_username_by_connection(&con, fd));
                         notify(formatted_msg, ANSI_COLOR_GREEN);
 
+                        // se siamo in un gruppo, la nuova connessione deve immediatamente essere considerata partecipante
+                        if(GROUPMODE) new_passive_connection(&partecipants, get_username_by_connection(&con, fd));
                         
                         show_request_server(username);
                         show_as_p2p(fd);

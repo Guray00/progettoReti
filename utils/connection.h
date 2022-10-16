@@ -36,4 +36,7 @@ void clear_connections(struct connection** head);
 // crea una nuova connessione passiva, non legata a un socket ma a un nome utente
 struct connection* new_passive_connection(struct connection** head, char *name);
 
+// restituisce il numero di elementi
+int connection_size(struct connection **head);
+
 #endif

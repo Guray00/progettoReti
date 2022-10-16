@@ -246,3 +246,15 @@ struct connection* new_passive_connection(struct connection** head, char *name){
     
     return tmp;
 }
+
+
+int connection_size(struct connection **head){
+    struct connection* p;
+    int counter = 0;
+
+    for(p = *head; p != NULL; p = p->next){
+        counter++;
+    }
+
+    return counter;
+}

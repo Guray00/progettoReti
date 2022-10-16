@@ -32,7 +32,7 @@ extern struct connection* con;
 
 // memorizza lo status di loggato o meno
 short unsigned int STATUS = OFFLINE;
-char SCENE [MAX_USERNAME_SIZE];
+//char SCENE [MAX_USERNAME_SIZE];
 int ret;
 
 // menu per un utente non collegato
@@ -253,6 +253,7 @@ int print_historic(char src[MAX_USERNAME_SIZE], char dst[MAX_USERNAME_SIZE]){
     
     // chiudo il file e termino
     fclose(file);
+    fflush(stdout);
     return 0;
 }
 
@@ -266,6 +267,15 @@ void printChatHeader(char *dest){
     print_centered(header);
     print_separation_line(); // ***
     printf("\n");
+}
+
+void print_group_chat_header(){
+    system("clear");
+    print_separation_line(); // ***
+    print_centered("CHAT DI GRUPPO");
+    print_separation_line(); // ***
+    printf("\n");
+    fflush(stdout);
 }
 
 int send_msg_to_net(char *dst, char *msg){
@@ -444,16 +454,102 @@ int available_request_to_net(){
 }
 
 
+void start_chat(char *dst){
+    char msg[MAX_MSG_SIZE]; 
+    int msg_size;
+    short int status;
+    char buffer[MAX_REQUEST_LEN];
+    char user[MAX_USERNAME_SIZE];
+    fstdin();
+
+                    // prende l'input dell'utente
+                    do  {
+                        char formatted_msg[MAX_MSG_SIZE];
+
+                        // prende in input il messaggio
+                        fgets(msg, MAX_MSG_SIZE, stdin);                        
+                        msg_size = strcspn(msg, "\n");
+                        msg[msg_size] = 0;
+
+                        // cancello la riga precendente (messaggio scritto dall'utente)
+                        printf("\033[A\r\33[2K");  
+                        fflush(stdout);     // necessario per cancellare subito la riga  del comando digitato
+
+                        // se il contenuto non è vuoto mando
+                        // il messaggio al mittente
+                        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 && !strstr(msg, "\\a")){
+
+                            // costtruisco il messaggio formattato con gli abbellimenti grafici
+                            // e lo mostro a schermo
+                            format_msg(formatted_msg, con->username, msg);
+                            printf(formatted_msg);             
+
+                            // invia al network la richiesta di invio messaggio,
+                            // e risponde segnalando se è stato recapitato direttamente o al server
+                            ret = send_msg_to_net(dst, msg);        
+                                                                   
+                            // se il messaggio è stato inviato correttamente
+                            // mostro a schermo le spunte di successo
+                            if(ret > 0){
+                                status = checkUserOnline(dst);        
+                                print_view_mark(status);
+                            }
+
+                            // altrimenti segno la spunta rossa per informare che il messaggio
+                            // non è stato mandato ne al server ne al device, verrà dunque perso
+                            else {
+                                print_view_mark(-2);
+                            }
+                            
+
+                            // forzo l'output del messaggio formattato
+                            fflush(stdout);
+                        }
+
+                        // se viene chiesto di mostrare gli utenti in rubrica online
+                        else if(strcmp(msg, "\\u") == 0){
+                            ret = available_request_to_net();
+                            if (ret == -1){
+                                printf(ANSI_COLOR_RED "Comando non disponibile: impossibile contattare il server al momento\n\n" ANSI_COLOR_RESET);
+                            }
+                        }
+
+                        // se viene richiesto di aggiungere un utente
+                        else if(strstr(msg, "\\a")){
+                                // recupero il nome dell'utente da aggiungere
+                                sscanf(msg, "%s %s", buffer, user);
+
+                                // costruisco la richiesta per net di aggiunta utente
+                                sprintf(buffer, "%d %s", ADDUSER_CODE, user);
+
+                                // invio la richiesta al network
+                                ret = send_request_to_net(buffer);
+                        }
+
+                    } while(strcmp(msg, "\\q") != 0);
+}
+
+
+void handle_message(){
+    char buffer[MAX_REQUEST_LEN];
+    short int code;
+
+    // leggo la richiesta
+    read(to_child_fd[0], buffer, MAX_REQUEST_LEN);
+    sscanf(buffer, "%hd %[^\n]", &code, buffer);
+
+}
+
+
 // MAIN DELLA GUI
 void startGUI(){    
         short int ret;  
 
 
-        char command[15], user[SIZE], pw[SIZE];
-        char msg[MAX_REQUEST_LEN]; int msg_size;
-        short int status;
+        char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];
+      
         char buffer[MAX_REQUEST_LEN];
-        // int i;
+        //int i;
 
         // Stampa il menu delle scelte
         print_menu();
@@ -461,18 +557,19 @@ void startGUI(){
         /*int fdmax = -1;
         fd_set readers, master;
 
+        FD_ZERO(&master);                   // pulisco il master
+        FD_ZERO(&readers);                  // pulisco i readers
+
         FD_SET(fileno(stdin), &master);
         fdmax = (fileno(stdin) > fdmax) ? fileno(stdin) : fdmax;
 
         FD_SET(to_child_fd[0], &master);           // aggiungo le risposte dal server in ascolto
-        fdmax = (to_child_fd[0] > fdmax) ? to_child_fd[0] : fdmax;
-        */
+        fdmax = (to_child_fd[0] > fdmax) ? to_child_fd[0] : fdmax;*/
         
         do {
 
-            //  seleziono i socket che sono attivi
-            /*
-            FD_ZERO(&readers);
+            //  seleziono i socket che sono attivi   
+            /*FD_ZERO(&readers);
             readers = master;  
             ret = select((fdmax)+1, &readers, NULL, NULL, NULL);
             if(ret<=0){
@@ -480,17 +577,20 @@ void startGUI(){
                 exit(1);
             }
             
+            // gestisco l'input e le richieste del net
             for(i = 0; i <= fdmax; i++){
 
+            // se nessuno è settato
             if(!FD_ISSET(i, &readers))
                 continue;
 
+            // se la richiesta arriva dal net
             if (i == to_child_fd[0]){
                 handle_message();
             }
 
-            else if (i == fileno(stdin)){
-            */
+            else if (i == fileno(stdin)){*/
+            
 
             // chiede l'inserimento di un comando
             
@@ -575,66 +675,18 @@ void startGUI(){
                         l'utente connesso o meno in base a ciò.*/
                     chat_request_to_net(user);
 
+
                     // TODO: controllare se il nome è in rubrica e corretto
 
 
                     // mostra la parte superiore della chat
                     printChatHeader(user);
 
-                    // salvo il socket
-                    strcpy(SCENE, user);
-
                     // mostra a schermo la cronologia e ne consente l'aggiornamento
                     print_historic(con->username, user);
 
-                    // prende l'input dell'utente
-                    do  {
-                        char formatted_msg[MAX_MSG_SIZE];
-
-                        // prende in input il messaggio
-                        fgets(msg, MAX_MSG_SIZE, stdin);                        
-                        msg_size = strcspn(msg, "\n");
-                        msg[msg_size] = 0;
-
-                        // cancello la riga precendente (messaggio scritto dall'utente)
-                        printf("\033[A\r\33[2K");  
-                        fflush(stdout);
-
-                        // se il contenuto non è vuoto mando
-                        // il messaggio al mittente
-                        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 ){
-
-                            // costtruisco il messaggio formattato
-                            format_msg(formatted_msg, con->username, msg);
-                            printf(formatted_msg);                  // stampa a schermo
-
-                            ret = send_msg_to_net(user, msg);       // invia al network la richiesta di invio messaggio, 
-                                                                    // e risponde segnalando se è stato recapitato direttamente o al server
-
-                            // se il messaggio è stato inviato correttamente
-                            // mostro a schermo le spunte di successo
-                            if(ret > 0){
-                                status = checkUserOnline(user);        
-                                print_view_mark(status);
-                            }
-                            else {
-                                print_view_mark(-2);
-                            }
-                            
-
-                            // mostro il messaggio formattato
-                            fflush(stdout);                 // forzo l'output
-                        }
-
-                        // se viene chiesto di mostrare gli utenti in rubrica online
-                        else if(strcmp(msg, "\\u") == 0){
-                            ret = available_request_to_net();
-                            if (ret == -1){
-                                printf(ANSI_COLOR_RED "Comando non disponibile: impossibile contattare il server al momento\n\n" ANSI_COLOR_RESET);
-                            }
-                        }
-
-                    } while(strcmp(msg, "\\q") != 0);
+                    // porta l'utente alla schermata di inserimento messaggi
+                    start_chat(user);
 
                     // riporta al menu principale
                     sprintf(buffer, "%d", QUITCHAT_CODE);

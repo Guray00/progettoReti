@@ -29,9 +29,12 @@
 #define PENDANTMSG_CODE   102
 #define WHOIS_CODE        103
 #define QUITCHAT_CODE     104
+#define CREATEGROUPCON_CODE 105
 
 #define ISONLINE_CODE     200
 #define AVAILABLE_CODE    201
+#define ADDUSER_CODE      202
+#define INVITEGROUP_CODE  203
 // =================================
 
 #define DEBUG               1
