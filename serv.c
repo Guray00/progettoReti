@@ -48,6 +48,13 @@ struct connection *con;
 // definizione costanti =========================
 const char ADDRESS[] = "127.0.0.1";
 
+/*
+const char MENU[] = 
+    "1) help " ANSI_COLOR_GREY " ⟶   Mostra questa pagina di informazioni" ANSI_COLOR_RESET "\n"
+    "2) list " ANSI_COLOR_GREY " ⟶   Mostra quali utenti sono attualmente online" ANSI_COLOR_RESET "\n"
+    "2) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n"
+    ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
+*/
 
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
@@ -775,6 +782,19 @@ void send_whois(int device, char* buf){
     send(i, (void*) &response, sizeof(uint16_t), 0);
 }
 
+/*
+void print_menu(){
+    print_separation_line();
+    print_centered("MENU SERVER");
+    print_separation_line();
+    printf(MENU);
+}
+
+
+void gui_handler(){
+
+}
+*/
 
 int main(int argc, char* argv[]){
 
@@ -809,6 +829,9 @@ int main(int argc, char* argv[]){
     FD_SET(sd, &master);                // aggiungo il socket di ricezione tra quelli monitorati
     if(sd > fd_max) fd_max = sd;
 
+    //FD_SET(fileno(stdin), &master);
+    //fd_max = (fileno(stdin) > fd_max) ? fileno(stdin) : fd_max;
+
     // inizializzo la lista di connessioni
     con = (void*) malloc(sizeof(struct connection));
     con->socket = sd;
@@ -816,6 +839,8 @@ int main(int argc, char* argv[]){
     con->next = NULL;
     strcpy(con->username, "server");
     con->port = port;
+
+    //print_menu();
 
     while(1){
 
@@ -841,6 +866,12 @@ int main(int argc, char* argv[]){
                     newConnection();
                 }
 
+                /*
+                if (i == fileno(stdin)){
+                    gui_handler();
+                }
+                */
+               
                 // in tutti gli altri casi sono i devices che effettuano le richieste
                 else {
                     short int code;

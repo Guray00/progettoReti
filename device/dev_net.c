@@ -1076,9 +1076,27 @@ void device_handler(int device){
             new_passive_connection(&partecipants, find_connection_by_socket(&con, device)->username);
             switch_to_group();
             break;
+
+        case QUITCHAT_CODE:
+            print_connection(&partecipants);
+            newp = find_connection(&partecipants, get_username_by_connection(&con, device));
+            remove_connection(&newp);
+            sprintf(buffer, "%s è uscito dalla chat", get_username_by_connection(&con, device));
+            notify(buffer, ANSI_COLOR_MAGENTA);
+            slog("sono %s ed ho rimosso %s", con->username, get_username_by_connection(&con, device));
+            print_connection(&partecipants);
     }
 }
 
+
+int send_quitchat_to_device(int fd){
+    char buffer[MAX_REQUEST_LEN];
+
+    sprintf(buffer, "%d %s", QUITCHAT_CODE, con->username);
+    ret = send_device_request(fd, buffer);
+
+    return ret;
+}
 
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
@@ -1216,9 +1234,11 @@ void gui_handler(){
                 //print_connection(&con);
 
                 // per ogni partecipante invio una richiesta di logout
+                slog("CREDO DI ESSERE IN GROUPMODE: %s", con->username);
                 for(p = partecipants; p != NULL; p = p->next){
                     // ogni utente con cui stavo parlando deve essere notificato del mio logout
-                    logout_device(find_connection(&con, p->username)->socket);
+                    ret = send_quitchat_to_device(find_connection(&con, p->username)->socket);
+                    if (ret < 0) break;
                 }
                 //print_connection(&con);
                 //sleep(15);
@@ -1227,6 +1247,8 @@ void gui_handler(){
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
             GROUPMODE = 0;
+            slog("STO USCENDO DA QUITCHAT(%d)", con->port);
+            ret = 1; // segnalo che è tutto a posto
             break;
 
         // richiesta di verifica di quali utenti in rubrica sono presenti
@@ -1276,9 +1298,10 @@ void startNET(){
     FD_SET(to_parent_fd[0], &master);           // aggiungo le risposte dal server in ascolto
     fdmax = (to_parent_fd[0] > fdmax) ? to_parent_fd[0] : fdmax;
     
+    /*
     FD_SET(to_child_fd[1], &master);            // aggiungo le risposte dal server in ascolto
     fdmax = (to_child_fd[1] > fdmax) ? to_child_fd[1] : fdmax;
-
+    */
 
     do{
         //  seleziono i socket che sono attivi
@@ -1301,7 +1324,8 @@ void startNET(){
                 slog("[NET:%d] intercettato socket %d", con->port, i);
 
                 // [GUI-HANDLER] se la gui mi ha inviato un messaggio
-                if(i == to_parent_fd[0]){      
+                if(i == to_parent_fd[0]){     
+                    slog("CHIAMO GUI HANDLER: %d", to_parent_fd[0]); 
                     gui_handler();
                 }
 

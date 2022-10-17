@@ -118,7 +118,12 @@ void print_logged_menu(char* username, int port){
 }
 
 // converte un comando ricevuto in un codice
-int command_to_code(char *command){
+int command_to_code(char *buffer){
+    char command[20];
+    // mi assicuro di prendere solo la prima parola, ovvero il comando
+    sscanf(buffer, "%s %[^\n]", command, buffer);
+    slog("COMANDO ORA VALE: %s", command);
+
     if (strcmp(command, "signup") == 0)
         return SIGNUP_CODE;
 
@@ -434,7 +439,7 @@ void print_view_mark(int status){
 
         // messaggio non inviato perchè server offline
         else if (status == -2)
-            printf(ANSI_COLOR_RED " [x]" ANSI_COLOR_RESET);
+            printf(ANSI_COLOR_RED " [X]" ANSI_COLOR_RESET);
 
         // messaggio non recapitato perchè utente offline
         else
@@ -461,18 +466,14 @@ void start_chat(char *dst){
     char buffer[MAX_REQUEST_LEN];
     char user[MAX_USERNAME_SIZE];
 
-    // quando parte la chat potrebbe essere interrotta una vecchia richiesta
-    // di inserimento di uno comando. Per questo motivo, nel caso in cui lo stdin
-    // fosse vuoto vi si scrive un carattere e si cancella la risposta a schermo.
-    write(fileno(stdin), "a\n", 2);
-    printf("\033[A\r\33[2K");  
     
     // funzione di utility per liberare lo standard input
-    fstdin();
+    //fstdin();
 
     // prende l'input dell'utente
     do  {
         char formatted_msg[MAX_MSG_SIZE];
+        memset(msg, 0, MAX_MSG_SIZE);
 
         // prende in input il messaggio
         fgets(msg, MAX_MSG_SIZE, stdin);                        
@@ -535,9 +536,12 @@ void start_chat(char *dst){
         }
 
     } while(strcmp(msg, "\\q") != 0);
-
+    slog("RICHIESTA DI USCIRE PER: %s", con->username);
+    
     // riporta al menu principale
+    memset(buffer, 0, MAX_REQUEST_LEN);
     sprintf(buffer, "%d", QUITCHAT_CODE);
+
     send_request_to_net(buffer);
     system("clear");    // pulisco la schermata
     print_logged_menu(con->username, con->port);
@@ -554,6 +558,13 @@ void handle_message(){
 
     switch (code){
     case STARTCHAT_CODE:
+
+        // quando parte la chat potrebbe essere interrotta una vecchia richiesta
+        // di inserimento di uno comando. Per questo motivo, nel caso in cui lo stdin
+        // fosse vuoto vi si scrive un carattere e si cancella la risposta a schermo.
+        //write(fileno(stdin), "a\n", 2);
+        //printf("\033[A\r\33[2K");  
+        slog("passato da qua");
         start_chat("inutile");
         break;
     
@@ -567,7 +578,6 @@ void handle_message(){
 // MAIN DELLA GUI
 void startGUI(){    
         short int ret;  
-
 
         char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];
       
@@ -590,7 +600,6 @@ void startGUI(){
         fdmax = (to_child_fd[0] > fdmax) ? to_child_fd[0] : fdmax;
         
         do {
-
             //  seleziono i socket che sono attivi   
             FD_ZERO(&readers);
             readers = master;  
@@ -599,7 +608,7 @@ void startGUI(){
                 perror("Errore nella select");
                 exit(1);
             }
-            
+
             // gestisco l'input e le richieste del net
             for(i = 0; i <= fdmax; i++){
 
@@ -617,11 +626,13 @@ void startGUI(){
 
             // chiede l'inserimento di un comando
             
-            scanf("%s", command);
+            fscanf(stdin, "%[^\n]", command);
+            slog("STO CICLANDO(%d): %s", con->port, command);
+            fstdin();
             switch(command_to_code(command)){
 
                 case SIGNUP_CODE:
-                    scanf("%s %s", user, pw);
+                    sscanf(command, "%s %s", user, pw);
 
                     // per iscriversi bisogna non essere collegati!
                     if(!login_limit()) {
@@ -640,7 +651,7 @@ void startGUI(){
                     break;
 
                 case LOGIN_CODE:
-                    scanf("%s %s", user, pw);
+                    sscanf(command, "%s %s", user, pw);
 
                     // per fare il login bisogna non essere collegati!
                     if(!login_limit()) {
@@ -677,7 +688,7 @@ void startGUI(){
                 
                 case CHAT_CODE:
                     // prendo in input l'utente a cui si vuole scrivere
-                    scanf("%s", user);
+                    sscanf(command, "%s", user);
 
                     // blocco il comando se non si è online
                     if(login_limit()) {
@@ -710,6 +721,7 @@ void startGUI(){
 
                     // porta l'utente alla schermata di inserimento messaggi
                     start_chat(user);
+                    slog("SONO USCITO DALLA CHAT AVVIATA: %s", con->username);
                     break;
 
                 case HANGING_CODE:
@@ -724,7 +736,7 @@ void startGUI(){
 
                 case SHOW_CODE:
                     // prendo in input il nome dell'utente
-                    scanf("%s", user);
+                    sscanf(command, "%s", user);
 
                     if(login_limit()) {
                         printf("Questa funzione è disponibile solo se collegati.\n\n");
@@ -754,7 +766,6 @@ void startGUI(){
 
                 // scelta errata
                 default:
-                    fstdin();
                     printf("Scelta scorretta, reinserire: ");
                     break;
             }

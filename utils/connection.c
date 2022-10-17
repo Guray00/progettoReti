@@ -51,27 +51,54 @@ struct connection* find_connection_by_socket(struct connection **head, int fd){
 
 // Rimuove una connessione dalla lista, senza chiuderla
 struct connection* remove_connection(struct connection **con){
-    struct connection* next;
+    
+    struct connection* next = NULL;
+    struct connection* prev = NULL;
 
     // se l'lemento è NULL, ritorno NULL
-    if (*con == NULL) return NULL;
+    if ( (*con) == NULL) return NULL;
 
     // elimino la connessione dalla lista
 
     // salvo un puntatore al prossimo elemento
-    next = (*con)->next;
+    if(*con) next = (*con)->next;
 
     // se il prossimo elemento esiste, imposto che punti al mio precedente
-    if(next)      next->prev = (*con)->prev;   
+    if(next) next->prev = (*con)->prev;   
 
-    // se il precedente esiste, imposto che punti al mio successivo    
-    if((*con)->prev) ((*con)->prev)->next = next;
+    // se il precedente esiste, imposto che punti al mio successivo   
+    prev =  (*con)->prev;
+    if(prev){
+        //printf("IL PRECEDENTE IN EFFETTI VALE: %p", ((*con)->prev));
+        //sleep(2);
+        prev->next = next;
+    } 
 
     // libero la memoria
-    free(*con);
+    //free(*con);
 
     // restituisco un puntatore al prossimo elemento
     return next;
+    
+
+    /*
+    struct connection *p = 0; 
+    struct connection *q;
+
+    for (q = (*con); q != 0 && q->inf != ; q = q->pun)
+        p = q;
+    
+    if (q == 0) 
+        return false;
+    
+    if (q == p0)
+        p0 = q->pun;
+    else
+        p->pun = q->pun;
+    
+    delete q;
+    return true;*/
+
 }
 
 // consente la chiusura di una connessione paddando il puntatore
@@ -205,13 +232,26 @@ void print_connection(struct connection** head){
 
 // cancella (senza chiudere) tutte le connessioni dalla lista
 void clear_connections(struct connection** head){
-    struct connection* next;
+    struct connection* next = NULL;
+    //int i;
 
     while(*head != NULL){
         next = remove_connection(head);
-        (*head) = next;
+        *head = next;
+    }
+    
+
+   /*
+    for(i = 0; *head != NULL && i < 10; (*head) = next)  {
+        print_connection(head);
+        printf("i = %d\n", i);
+        i++;
+        sleep(1);
+
+        next = remove_connection(head);
     }
 
+    */
 }
 
 // dato il nome di un utente, si aggiorna il suo socket
@@ -226,6 +266,7 @@ struct connection* new_passive_connection(struct connection** head, char *name){
     tmp = (void*) malloc(sizeof(struct connection));
     tmp->socket = -1;
     tmp->next = NULL;
+    tmp->prev = NULL;
     strcpy(tmp->username, name);
 
     tail = *head;

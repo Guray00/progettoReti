@@ -21,3 +21,5 @@ run:
 build:
 	make
 	make run
+
+# ./utils/graphics.c
