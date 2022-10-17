@@ -460,73 +460,81 @@ void start_chat(char *dst){
     short int status;
     char buffer[MAX_REQUEST_LEN];
     char user[MAX_USERNAME_SIZE];
+
+    // quando parte la chat potrebbe essere interrotta una vecchia richiesta
+    // di inserimento di uno comando. Per questo motivo, nel caso in cui lo stdin
+    // fosse vuoto vi si scrive un carattere e si cancella la risposta a schermo.
+    write(fileno(stdin), "a\n", 2);
+    printf("\033[A\r\33[2K");  
+    
+    // funzione di utility per liberare lo standard input
     fstdin();
 
-                    // prende l'input dell'utente
-                    do  {
-                        char formatted_msg[MAX_MSG_SIZE];
+    // prende l'input dell'utente
+    do  {
+        char formatted_msg[MAX_MSG_SIZE];
 
-                        // prende in input il messaggio
-                        fgets(msg, MAX_MSG_SIZE, stdin);                        
-                        msg_size = strcspn(msg, "\n");
-                        msg[msg_size] = 0;
+        // prende in input il messaggio
+        fgets(msg, MAX_MSG_SIZE, stdin);                        
+        msg_size = strcspn(msg, "\n");
+        msg[msg_size] = 0;
 
-                        // cancello la riga precendente (messaggio scritto dall'utente)
-                        printf("\033[A\r\33[2K");  
-                        fflush(stdout);     // necessario per cancellare subito la riga  del comando digitato
+        // cancello la riga precendente (messaggio scritto dall'utente)
+        printf("\033[A\r\33[2K");  
+        fflush(stdout);     // necessario per cancellare subito la riga  del comando digitato
 
-                        // se il contenuto non è vuoto mando
-                        // il messaggio al mittente
-                        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 && !strstr(msg, "\\a")){
+        // se il contenuto non è vuoto mando
+        // il messaggio al mittente
+        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 && !strstr(msg, "\\a")){
 
-                            // costtruisco il messaggio formattato con gli abbellimenti grafici
-                            // e lo mostro a schermo
-                            format_msg(formatted_msg, con->username, msg);
-                            printf(formatted_msg);             
+            // costtruisco il messaggio formattato con gli abbellimenti grafici
+            // e lo mostro a schermo
+            format_msg(formatted_msg, con->username, msg);
+            printf(formatted_msg);             
 
-                            // invia al network la richiesta di invio messaggio,
-                            // e risponde segnalando se è stato recapitato direttamente o al server
-                            ret = send_msg_to_net(dst, msg);        
+            // invia al network la richiesta di invio messaggio,
+            // e risponde segnalando se è stato recapitato direttamente o al server
+            ret = send_msg_to_net(dst, msg);        
                                                                    
-                            // se il messaggio è stato inviato correttamente
-                            // mostro a schermo le spunte di successo
-                            if(ret > 0){
-                                status = checkUserOnline(dst);        
-                                print_view_mark(status);
-                            }
+            // se il messaggio è stato inviato correttamente
+            // mostro a schermo le spunte di successo
+            if(ret > 0){
+                status = checkUserOnline(dst);        
+                print_view_mark(status);
+            }
 
-                            // altrimenti segno la spunta rossa per informare che il messaggio
-                            // non è stato mandato ne al server ne al device, verrà dunque perso
-                            else {
-                                print_view_mark(-2);
-                            }
+            // altrimenti segno la spunta rossa per informare che il messaggio
+            // non è stato mandato ne al server ne al device, verrà dunque perso
+            else {
+                print_view_mark(-2);
+            }
                             
 
-                            // forzo l'output del messaggio formattato
-                            fflush(stdout);
-                        }
+            // forzo l'output del messaggio formattato
+            fflush(stdout);
+        }
 
-                        // se viene chiesto di mostrare gli utenti in rubrica online
-                        else if(strcmp(msg, "\\u") == 0){
-                            ret = available_request_to_net();
-                            if (ret == -1){
-                                printf(ANSI_COLOR_RED "Comando non disponibile: impossibile contattare il server al momento\n\n" ANSI_COLOR_RESET);
-                            }
-                        }
+        // se viene chiesto di mostrare gli utenti in rubrica online
+        else if(strcmp(msg, "\\u") == 0){
+            ret = available_request_to_net();
+            if (ret == -1){
+                printf(ANSI_COLOR_RED "Comando non disponibile: impossibile contattare il server al momento\n\n" ANSI_COLOR_RESET);
+            }
+        }
 
-                        // se viene richiesto di aggiungere un utente
-                        else if(strstr(msg, "\\a")){
-                                // recupero il nome dell'utente da aggiungere
-                                sscanf(msg, "%s %s", buffer, user);
+            // se viene richiesto di aggiungere un utente
+        else if(strstr(msg, "\\a")){
+            // recupero il nome dell'utente da aggiungere
+            sscanf(msg, "%s %s", buffer, user);
 
-                                // costruisco la richiesta per net di aggiunta utente
-                                sprintf(buffer, "%d %s", ADDUSER_CODE, user);
+            // costruisco la richiesta per net di aggiunta utente
+            sprintf(buffer, "%d %s", ADDUSER_CODE, user);
 
-                                // invio la richiesta al network
-                                ret = send_request_to_net(buffer);
-                        }
+            // invio la richiesta al network
+            ret = send_request_to_net(buffer);
+        }
 
-                    } while(strcmp(msg, "\\q") != 0);
+    } while(strcmp(msg, "\\q") != 0);
 
     // riporta al menu principale
     sprintf(buffer, "%d", QUITCHAT_CODE);

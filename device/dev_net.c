@@ -905,6 +905,9 @@ void switch_to_group(){
     print_group_chat_header();
     GROUPMODE = 1;
 
+    // write(fileno(stdin), "a\n", 2);
+    // printf("\033[A\r\33[2K"); 
+
     // avverto la gui di avviare una chat per far avvenire l'inserimento
     sprintf(buffer, "%hd", STARTCHAT_CODE);
     send_request_to_gui(buffer);
@@ -943,15 +946,18 @@ int add_user(char *dst){
     switch_to_group();
 
     // scorro tutti i partecipanti alla chat
+    //print_connection(&partecipants);
     for(p = partecipants; p != NULL; p = p->next){
 
+        // la richiesta non deve essere inoltrata all'utente invitato
         if(strcmp(p->username, dst) == 0) continue;
 
         // se la connessione con un partecipanti non è ancora 
         // presente la forzo
         c = find_connection(&con, p->username);
         if(c == NULL){
-            c = create_connection(dst);
+            c = create_connection(p->username);
+            set_connection(&con, p->username, c->socket);
 
             // se la connessione non può essere instaurata esco
             // nota: è il caso quando il server è offline
@@ -970,7 +976,9 @@ int add_user(char *dst){
         if (ret == -1) return -1;        
 
         slog("INOLTRATO RICHIESTA DI ADDUSER A: %s", c->username);
-    }    
+    }   
+    // print_connection(&partecipants);
+    // print_connection(&con);
 
     new_passive_connection(&partecipants, dst);
     return 0;
@@ -990,9 +998,8 @@ void device_handler(int device){
 
     switch(code){
 
-        // DISCONNECT REQUEST
+        // DISCONNECT REQUEST - un dispositivo invia una richiesta di disconnessione
         case LOGOUT_CODE:
-            //slog("arrivata al net chiusura device");
             sprintf(buffer, "%s", get_username_by_connection(&con, device));
 
             // solo se trovo il nome stampo la notifica a schermo
@@ -1001,6 +1008,9 @@ void device_handler(int device){
                 notify(buffer, ANSI_COLOR_RED);
             }
 
+            // se l'utente che esce aveva qualche chat attiva, si rimuovono i partecipanti
+            newp = find_connection(&partecipants, get_username_by_connection(&con, device));
+            if(newp != NULL) remove_connection(&newp);
 
             close_connection_by_socket(&con, device);
             FD_CLR(device, &master);
@@ -1149,7 +1159,6 @@ void gui_handler(){
 
             // nota: nel buffer è presente il nome utente
             // TODO: controllare se il partecipante esiste realmente
-            //strcpy(SCENE, buffer);
 
             // aggiungo il partecipante alla lista
             new_passive_connection(&partecipants, buffer);
@@ -1201,7 +1210,20 @@ void gui_handler(){
 
         // gestisce l'uscita dalla chat eleminando gli utenti dalla chat
         case QUITCHAT_CODE:
-            //strcpy(SCENE, "");
+            // se sono in un gruppo, elimino anche le connessioni
+            if(GROUPMODE == 1){
+                //print_connection(&partecipants);
+                //print_connection(&con);
+
+                // per ogni partecipante invio una richiesta di logout
+                for(p = partecipants; p != NULL; p = p->next){
+                    // ogni utente con cui stavo parlando deve essere notificato del mio logout
+                    logout_device(find_connection(&con, p->username)->socket);
+                }
+                //print_connection(&con);
+                //sleep(15);
+            }
+
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
             GROUPMODE = 0;
