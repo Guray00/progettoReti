@@ -61,21 +61,28 @@ struct connection* remove_connection(struct connection **con){
     // elimino la connessione dalla lista
 
     // salvo un puntatore al prossimo elemento
-    if(*con) next = (*con)->next;
+    next = (*con)->next;
+    prev = (*con)->prev;
+    
+    // libero la memoria dell'elemento da cancellare
+    //free(*con);
 
     // se il prossimo elemento esiste, imposto che punti al mio precedente
-    if(next) next->prev = (*con)->prev;   
+    if(next) next->prev = prev;   
 
     // se il precedente esiste, imposto che punti al mio successivo   
-    prev =  (*con)->prev;
     if(prev){
-        //printf("IL PRECEDENTE IN EFFETTI VALE: %p", ((*con)->prev));
-        //sleep(2);
         prev->next = next;
+    }
+    else {
+        // se entro significa che il precedente era NULL
+        // L'unico caso in cui il precedente è NULL è che si stia
+        // eseguendo un estrazione in testa. Dunque, se viene passata la testa,
+        // questa dovrà essere estratta è sarà necessario puntare al successivo
+        con = &next;
+        printf("ho sistemato la nuova testa\n");
     } 
 
-    // libero la memoria
-    //free(*con);
 
     // restituisco un puntatore al prossimo elemento
     return next;
@@ -163,13 +170,13 @@ struct connection* new_connection(struct connection** head, int sock){
     tmp = (void*) malloc(sizeof(struct connection));
     tmp->socket = sock;
     tmp->next = NULL;
+    tmp->prev = NULL;
     strcpy(tmp->username, "undefined");
 
     tail = *head;
 
     // se la testa è NULL, sostituisco in testa
     if (tail == NULL){
-        tmp->prev = NULL;
         *head = tmp;
     } 
     
@@ -298,4 +305,46 @@ int connection_size(struct connection **head){
     }
 
     return counter;
+}
+
+int remove_connection_by_socket(struct connection **head, int fd){
+
+    struct connection *p, *next;
+
+
+    for (p = (*head); p != NULL; p = p->next){
+
+        if(p->socket == fd){
+            next  = remove_connection(&p);
+            if(*head == p) (*head) = next;
+            return 1; 
+        }
+
+    }
+
+    return 0;
+}
+
+
+int remove_connection_by_username(struct connection **head, char *username){
+
+    struct connection *p = NULL, *next = NULL;
+
+
+    for (p = (*head); p != NULL; p = p->next){
+
+        if(strcmp(p->username, username) == 0){
+            printf("sto rimuovendo adesso %s\n", p->username);
+            next = remove_connection(&p);
+
+            // se ho estratto in testa, devo aggiornare dove puntare perchè il risultato di
+            // &p non altererà il valore di head
+            if (*head == p) *head = next;
+            printf("dovrei averlo rimosso...\n");
+            return 1;
+        }
+
+    }
+
+    return 0;
 }

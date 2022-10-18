@@ -39,4 +39,8 @@ struct connection* new_passive_connection(struct connection** head, char *name);
 // restituisce il numero di elementi
 int connection_size(struct connection **head);
 
+int remove_connection_by_socket(struct connection **head, int fd);
+
+int remove_connection_by_username(struct connection **head, char *username);
+
 #endif

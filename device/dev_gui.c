@@ -342,7 +342,7 @@ int hanging(){
     fclose(file);
 
     printf("\n\nPremi [INVIO] per tornare indietro: ");
-    fstdin();   // pulisco da eventuali residui
+    //fstdin();   // pulisco da eventuali residui
     getchar();  // aspetto la pressione di "invio"
 
     // mostro nuovamente a schermo il vecchio menu
@@ -422,7 +422,7 @@ int show(char *mittente){
 
     // aspetto l'input dell'utente per andare avanti
     printf("\n\nPremi [INVIO] per tornare indietro: ");
-    fstdin();   // pulisco da eventuali residui
+    //fstdin();   // pulisco da eventuali residui
     getchar();  // aspetto la pressione di "invio"
 
     // mostro nuovamente a schermo il vecchio menu

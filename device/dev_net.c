@@ -1078,13 +1078,17 @@ void device_handler(int device){
             break;
 
         case QUITCHAT_CODE:
-            print_connection(&partecipants);
-            newp = find_connection(&partecipants, get_username_by_connection(&con, device));
-            remove_connection(&newp);
+            //  print_connection(&con);
+            // print_connection(&partecipants);
+            if(GROUPMODE == 1) remove_connection_by_username(&partecipants, get_username_by_connection(&con, device));
             sprintf(buffer, "%s è uscito dalla chat", get_username_by_connection(&con, device));
             notify(buffer, ANSI_COLOR_MAGENTA);
             slog("sono %s ed ho rimosso %s", con->username, get_username_by_connection(&con, device));
-            print_connection(&partecipants);
+            // print_connection(&partecipants);
+
+            if(connection_size(&partecipants) < 1 && GROUPMODE == 1) {
+                notify("Nessun utente attualmente in chat", ANSI_COLOR_CYAN);   
+            }
     }
 }
 
@@ -1229,20 +1233,15 @@ void gui_handler(){
         // gestisce l'uscita dalla chat eleminando gli utenti dalla chat
         case QUITCHAT_CODE:
             // se sono in un gruppo, elimino anche le connessioni
-            if(GROUPMODE == 1){
-                //print_connection(&partecipants);
-                //print_connection(&con);
-
+            //if(GROUPMODE == 1){
                 // per ogni partecipante invio una richiesta di logout
-                slog("CREDO DI ESSERE IN GROUPMODE: %s", con->username);
+                //slog("CREDO DI ESSERE IN GROUPMODE: %s", con->username);
                 for(p = partecipants; p != NULL; p = p->next){
                     // ogni utente con cui stavo parlando deve essere notificato del mio logout
                     ret = send_quitchat_to_device(find_connection(&con, p->username)->socket);
                     if (ret < 0) break;
                 }
-                //print_connection(&con);
-                //sleep(15);
-            }
+            //}
 
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
