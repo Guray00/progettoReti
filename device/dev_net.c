@@ -933,10 +933,11 @@ int add_user(char *dst){
     if(find_connection(&partecipants, dst) != NULL) return -2;
 
     // aggiungo il nuovo partecipante alla lista dei partecipanti
-    if(find_connection(&con, dst) == 0) 
+    c = find_connection(&con, dst); 
+    if(c== NULL){
         c = create_connection(dst);
-    
-    if(c == NULL) return -2;
+        if(c == NULL) return -2;
+    }
     
     // mando l'invito all'utente
     ret = send_group_invite(c);

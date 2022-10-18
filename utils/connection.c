@@ -80,7 +80,7 @@ struct connection* remove_connection(struct connection **con){
         // eseguendo un estrazione in testa. Dunque, se viene passata la testa,
         // questa dovrà essere estratta è sarà necessario puntare al successivo
         con = &next;
-        printf("ho sistemato la nuova testa\n");
+        // printf("ho sistemato la nuova testa\n");
     } 
 
 
@@ -334,13 +334,13 @@ int remove_connection_by_username(struct connection **head, char *username){
     for (p = (*head); p != NULL; p = p->next){
 
         if(strcmp(p->username, username) == 0){
-            printf("sto rimuovendo adesso %s\n", p->username);
+            //printf("sto rimuovendo adesso %s\n", p->username);
             next = remove_connection(&p);
 
             // se ho estratto in testa, devo aggiornare dove puntare perchè il risultato di
             // &p non altererà il valore di head
             if (*head == p) *head = next;
-            printf("dovrei averlo rimosso...\n");
+            //printf("dovrei averlo rimosso...\n");
             return 1;
         }
 
