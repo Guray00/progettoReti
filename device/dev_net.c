@@ -1079,14 +1079,17 @@ void device_handler(int device){
             break;
 
         case QUITCHAT_CODE:
-            //  print_connection(&con);
-            // print_connection(&partecipants);
-            if(GROUPMODE == 1) remove_connection_by_username(&partecipants, get_username_by_connection(&con, device));
-            sprintf(buffer, "%s è uscito dalla chat", get_username_by_connection(&con, device));
-            notify(buffer, ANSI_COLOR_MAGENTA);
-            slog("sono %s ed ho rimosso %s", con->username, get_username_by_connection(&con, device));
-            // print_connection(&partecipants);
+            // se sono ancora in chat con l'utente che mi ha scritto
+            if(find_connection(&partecipants, get_username_by_connection(&con, device)) != NULL){
+                sprintf(buffer, "%s è uscito dalla chat", get_username_by_connection(&con, device));
+                notify(buffer, ANSI_COLOR_MAGENTA);
+            }
 
+            // rimuovo che il partecipante solamente nelle chat di gruppo. Questo è necessario
+            // per consentire l'invio di messaggi pendenti nel server quando l'utente va offline
+            // oppure esce dalla chat
+            if(GROUPMODE == 1) remove_connection_by_username(&partecipants, get_username_by_connection(&con, device));
+            
             if(connection_size(&partecipants) < 1 && GROUPMODE == 1) {
                 notify("Nessun utente attualmente in chat", ANSI_COLOR_CYAN);   
             }
