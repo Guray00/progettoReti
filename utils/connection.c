@@ -79,7 +79,7 @@ struct connection* remove_connection(struct connection **con){
         // L'unico caso in cui il precedente è NULL è che si stia
         // eseguendo un estrazione in testa. Dunque, se viene passata la testa,
         // questa dovrà essere estratta è sarà necessario puntare al successivo
-        con = &next;
+        //con = &next;
         // printf("ho sistemato la nuova testa\n");
     } 
 

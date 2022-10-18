@@ -616,7 +616,6 @@ int send_msg(char* buffer){
 
     // ricavo il messaggio e il destinatario
     sscanf(buffer, "%s %[^\n\t]", original, msg);
-    //slog("[NET:%d] vuole scrivere a %s", con->port, dst);
 
     // per ogni partecipante alla chat, invio un messaggio
     for(p = partecipants; p != NULL; p = p->next){
@@ -674,6 +673,8 @@ int send_msg(char* buffer){
         // slog("=========================");
     }
 
+    if(ret > 0) ret = 1;
+    slog("SENDMSG ritorna, RET VALE: %d", ret);
     return ret;
 }
 
@@ -944,7 +945,7 @@ int add_user(char *dst){
     if(ret <= 0) return ret;
 
     // passo graficamente alla chat di gruppo
-    switch_to_group();
+    //switch_to_group();
 
     // scorro tutti i partecipanti alla chat
     //print_connection(&partecipants);
@@ -1110,10 +1111,10 @@ void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
     short int code;                     // codice della richiesta effettuata
-    char answer[4];                     // codice della risposta
+    //char answer[4];                     // codice della risposta
     char* args;
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
-    struct connection *p;
+    struct connection *p, *q;
 
     // recupero il tipo di richiesta in base al codice
     read(to_parent_fd[0], read_buffer, MAX_REQUEST_LEN);
@@ -1214,6 +1215,7 @@ void gui_handler(){
         // SEND MESSAGE REQUEST
         case SENDMSG_CODE:
             ret = send_msg(buffer);
+            slog("fine case sendmsg ret vale: %d", ret);
             break;
 
         // SEND HANGING REQUEST
@@ -1236,16 +1238,14 @@ void gui_handler(){
 
         // gestisce l'uscita dalla chat eleminando gli utenti dalla chat
         case QUITCHAT_CODE:
-            // se sono in un gruppo, elimino anche le connessioni
-            //if(GROUPMODE == 1){
-                // per ogni partecipante invio una richiesta di logout
-                //slog("CREDO DI ESSERE IN GROUPMODE: %s", con->username);
-                for(p = partecipants; p != NULL; p = p->next){
-                    // ogni utente con cui stavo parlando deve essere notificato del mio logout
-                    ret = send_quitchat_to_device(find_connection(&con, p->username)->socket);
+            for(p = partecipants; p != NULL; p = p->next){
+                // ogni utente con cui stavo parlando deve essere notificato del mio logout
+                q = find_connection(&con, p->username);
+                if(q != NULL) {
+                    ret = send_quitchat_to_device(q->socket);
                     if (ret < 0) break;
                 }
-            //}
+            }
 
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
@@ -1267,17 +1267,22 @@ void gui_handler(){
         case ADDUSER_CODE:
             // buffer contiene il nome dell'utente da aggiungere
             add_user(buffer);
-            break;
+            return;
 
         // BAD REQUEST
         default:
             ret = -1;
+            slog("BAD REQUEST");
             break;
     }
 
     // restituisco la risposta
-    sprintf(answer, "%d", ret);
-    write(to_child_fd[1], answer, sizeof(ret));
+    slog("[NET:%d] sto per mandare a gui, ret: %d", con->port, ret);
+    //memset(answer, 0, sizeof(answer));
+    //sprintf(answer, "%d", ret);
+    //ret = 7;
+
+    write(to_child_fd[1], &ret, sizeof(ret));
 }
 
 
@@ -1285,6 +1290,7 @@ void startNET(){
     // handler per la disconnessione
     signal(SIGINT, intHandler);
     int i  = 0;
+    ret = 0;
 
     // set per la verifica
     fd_set readers;
@@ -1301,10 +1307,10 @@ void startNET(){
     FD_SET(to_parent_fd[0], &master);           // aggiungo le risposte dal server in ascolto
     fdmax = (to_parent_fd[0] > fdmax) ? to_parent_fd[0] : fdmax;
     
-    /*
-    FD_SET(to_child_fd[1], &master);            // aggiungo le risposte dal server in ascolto
-    fdmax = (to_child_fd[1] > fdmax) ? to_child_fd[1] : fdmax;
-    */
+    
+    // FD_SET(to_child_fd[1], &master);            // aggiungo le risposte dal server in ascolto
+    // fdmax = (to_child_fd[1] > fdmax) ? to_child_fd[1] : fdmax;
+    
 
     do{
         //  seleziono i socket che sono attivi
@@ -1383,21 +1389,23 @@ void startNET(){
                         FD_SET(fd, &master);
                         if(fd > fdmax) fdmax = fd;
 
+                        // notifica al collegamento con un device
                         sprintf(formatted_msg, "%s si è appena collegato", get_username_by_connection(&con, fd));
                         notify(formatted_msg, ANSI_COLOR_GREEN);
 
                         // se siamo in un gruppo, la nuova connessione deve immediatamente essere considerata partecipante
                         if(GROUPMODE) new_passive_connection(&partecipants, get_username_by_connection(&con, fd));
                         
+                        // invio la richiesta di notifica
                         show_request_server(username);
                         show_as_p2p(fd);
                     }
                     
-                    // autentificazione fallita, chido la comunicazione
+                    // autentificazione fallita, chiudo la comunicazione
                     else {
-                        printf("TRADITO");
+                        printf("\nCONNESSIONE MALEVOLA INDIVIDUATA\n");
                         fflush(stdout);
-                        slog("--- TRADITO ---");
+                        slog("CONNESSIONE MALEVOLA INDIVIDUATA");
                         close(fd);
                     }
 

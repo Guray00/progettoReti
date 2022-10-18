@@ -117,6 +117,12 @@ void print_logged_menu(char* username, int port){
     fflush(stdout);
 }
 
+// pulisce lo standard input
+void fstdin(){
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
+}
+
 // converte un comando ricevuto in un codice
 int command_to_code(char *buffer){
     char command[20];
@@ -145,28 +151,37 @@ int command_to_code(char *buffer){
     else if (strcmp(command, "out")     == 0)
         return LOGOUT_CODE;
     
-    return -1;
+    else {
+        // pulisco l'output
+        return -1;
+    }
 }
 
-// pulisce lo standard input
-void fstdin(){
-    int c;
-    while ((c = getchar()) != '\n' && c != EOF);
-}
 
 // MACRO  per inviare al network una richiesta
 int send_request_to_net(char* buffer){
-    char ret_code[4];//, result;
-    int result;
+    //char ret_code[4];//, result;
+    int result = 0;
 
     // GUI -> NET, invio la richiesta
-    write(to_parent_fd[1], buffer, strlen(buffer) + 1);
+    slog("SONO SEND->net invio %s", buffer);
+    write(to_parent_fd[1], buffer, MAX_REQUEST_LEN);
 
     // NET -> GUI, aspetto la risposta
-    read(to_child_fd[0], ret_code, sizeof(ret_code));
-    result = atoi(ret_code);               // converto la risposta
+    read(to_child_fd[0], &result, sizeof(result));
+    slog("SONO SEND->net HO RICEVUTO: %hd", result);
+    //slog("mannaggia sono send_request e ricevo: %d", result);
+    //result = atoi(ret_code);               // converto la risposta
 
     return result;
+}
+
+void send_request_to_net_without_response(char* buffer){
+
+    // GUI -> NET, invio la richiesta senza attendere una risposta
+    slog("SONO SEND->net SENZA RISPOSTA invio %s", buffer);
+    write(to_parent_fd[1], buffer, MAX_REQUEST_LEN);
+
 }
 
 // effettua una richiesta di login
@@ -286,9 +301,11 @@ void print_group_chat_header(){
 int send_msg_to_net(char *dst, char *msg){
     char buffer[MAX_REQUEST_LEN];
     
+    memset(buffer, 0, sizeof(buffer));
     sprintf(buffer, "%d %s %s", SENDMSG_CODE, dst, msg);
-    slog("[GUI->NET]: %s", buffer);
+    slog("[GUI->NET] sei passato da send_msg_to_net: %s", buffer);
     ret = send_request_to_net(buffer);
+    slog("[GUI->NET] sei tornato da send_msg_to_net: %d", ret);
     return ret;
 }
 
@@ -495,7 +512,7 @@ void start_chat(char *dst){
 
             // invia al network la richiesta di invio messaggio,
             // e risponde segnalando se è stato recapitato direttamente o al server
-            ret = send_msg_to_net(dst, msg);        
+            ret = send_msg_to_net(dst, msg);  
                                                                    
             // se il messaggio è stato inviato correttamente
             // mostro a schermo le spunte di successo
@@ -532,7 +549,7 @@ void start_chat(char *dst){
             sprintf(buffer, "%d %s", ADDUSER_CODE, user);
 
             // invio la richiesta al network
-            ret = send_request_to_net(buffer);
+            send_request_to_net_without_response(buffer);
         }
 
     } while(strcmp(msg, "\\q") != 0);
@@ -562,9 +579,7 @@ void handle_message(){
         // quando parte la chat potrebbe essere interrotta una vecchia richiesta
         // di inserimento di uno comando. Per questo motivo, nel caso in cui lo stdin
         // fosse vuoto vi si scrive un carattere e si cancella la risposta a schermo.
-        //write(fileno(stdin), "a\n", 2);
-        //printf("\033[A\r\33[2K");  
-        slog("passato da qua");
+        slog("[NET:%d]passato da qua", con->port);
         start_chat("inutile");
         break;
     
