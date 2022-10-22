@@ -14,7 +14,8 @@
 
 // ====================
 #include "./dev_net.h"
-#include "./dev_gui.h"
+#include "../utils/graphics.h"
+// #include "./dev_gui.h"
 #include "../utils/costanti.h"
 #include "../utils/connection.h"
 #include "../API/logger.h"
@@ -343,18 +344,6 @@ int recive_from_device(char *buffer, int fd){
     return received_bytes;
 }
 
-// gestore notifiche a schermo
-void notify(char* msg, char *COLOR){
-    char formatted_msg[MAX_REQUEST_LEN];
-
-    printf("\n");
-    sprintf(formatted_msg,  "[ %s ]" , msg);
-    printf(COLOR);
-    print_centered_dotted(formatted_msg);
-    printf(ANSI_COLOR_RESET);
-    printf("\n");
-}
-
 // Gestisce le richieste arrivate dal server e dirette al device
 void server_handler(){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
@@ -379,6 +368,43 @@ void server_handler(){
 
             break;
     }
+}
+
+// verifica la presenza di un utente all'interno dei contatti
+int check_user_in_contacts(char *user){
+    FILE *file;
+    char buffer[200];
+    char path[50];
+    char *line = NULL;
+    ssize_t read;
+    size_t l;
+ 
+    // genero i file se non presenti
+    sprintf(path, "./devices_data/%s/%s", con->username, CONTACTS_FILE);
+    sprintf(buffer, "mkdir -p ./devices_data/%s/ && touch %s",con->username, path);
+    system(buffer);
+
+    // provo ad aprire il file dei contatti
+    file = fopen(path, "r");
+    if(file < 0){
+        perror("Non è stato possibile aprire i file");
+        return -1;
+    }
+
+    ret  = -2;
+    // leggo ogni utente dal file dei contatti
+    while((read=getline(&line, &l, file)) != -1){
+        line[strcspn(line, "\n")] = 0;
+
+        if(strcmp(line, user) == 0){
+            ret = 1;
+            break;
+        }
+    }
+
+    // chiudo il file
+    fclose(file);    
+    return ret;
 }
 
 // gestisce l'arrivo di un messaggio P2P
@@ -937,6 +963,8 @@ int add_user(char *dst){
     c = find_connection(&con, dst); 
     if(c== NULL){
         c = create_connection(dst);
+
+        // se l'utente non esiste, usciamo
         if(c == NULL) return -2;
     }
     
@@ -944,11 +972,9 @@ int add_user(char *dst){
     ret = send_group_invite(c);
     if(ret <= 0) return ret;
 
-    // passo graficamente alla chat di gruppo
-    //switch_to_group();
+    // notify("Nuova chat di gruppo avviata", ANSI_COLOR_GREY);
 
     // scorro tutti i partecipanti alla chat
-    //print_connection(&partecipants);
     for(p = partecipants; p != NULL; p = p->next){
 
         // la richiesta non deve essere inoltrata all'utente invitato
@@ -977,11 +1003,9 @@ int add_user(char *dst){
         ret = send_device_request(c->socket, buffer);
         if (ret == -1) return -1;        
 
-        slog("INOLTRATO RICHIESTA DI ADDUSER A: %s", c->username);
     }   
-    // print_connection(&partecipants);
-    // print_connection(&con);
 
+    // aggiungiamo la nuova connession
     new_passive_connection(&partecipants, dst);
     return 0;
 }
@@ -1074,11 +1098,13 @@ void device_handler(int device){
 
             break;
         
+        // abilita la visulaizzazione della chat di gruppo
         case ENABLEGROUP_CODE:
             new_passive_connection(&partecipants, find_connection_by_socket(&con, device)->username);
             switch_to_group();
             break;
 
+        // invio richiesta di uscita dalla chat
         case QUITCHAT_CODE:
             // se sono ancora in chat con l'utente che mi ha scritto
             if(find_connection(&partecipants, get_username_by_connection(&con, device)) != NULL){
@@ -1134,7 +1160,7 @@ void gui_handler(){
             send_server_request(read_buffer);
             ret = recive_code_from_server();
 
-            // TODO: la signup dovrebbe staccare dal server
+            // TODO: la signup dovrebbe staccare dal server            
             break;
 
         // LOGIN REQUEST
@@ -1180,13 +1206,15 @@ void gui_handler(){
             break;
 
         case CHAT_CODE:
+            // Verifico che l'utente con il quale si vuole parlare sia effettivamente
+            // nella lista dei contatti
+            ret = check_user_in_contacts(buffer);
+            if (ret <= 0) break;
+
             // si recuperano ii messaggi non ancora recapitati dal mittente stesso
             ret = show_request_server(buffer);
             if(ret < 0) break;
-
-            // nota: nel buffer è presente il nome utente
-            // TODO: controllare se il partecipante esiste realmente
-
+            
             // aggiungo il partecipante alla lista
             new_passive_connection(&partecipants, buffer);
             break;
@@ -1265,9 +1293,15 @@ void gui_handler(){
 
         // richiesta di aggiunta di un utente alla chat
         case ADDUSER_CODE:
-            // buffer contiene il nome dell'utente da aggiungere
-            add_user(buffer);
-            return;
+            // nota: buffer contiene il nome dell'utente da aggiungere
+
+            // controlla se l'utente appartiene ai propri contatti
+            ret = check_user_in_contacts(buffer);
+            if(ret < 0) break;
+
+            // aggiunge l'utente alla chat
+            ret = add_user(buffer);
+            break;
 
         // BAD REQUEST
         default:
@@ -1280,7 +1314,6 @@ void gui_handler(){
     slog("[NET:%d] sto per mandare a gui, ret: %d", con->port, ret);
     //memset(answer, 0, sizeof(answer));
     //sprintf(answer, "%d", ret);
-    //ret = 7;
 
     write(to_child_fd[1], &ret, sizeof(ret));
 }

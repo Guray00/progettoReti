@@ -15,6 +15,7 @@
 #include "./dev_gui.h"
 #include "../utils/costanti.h"
 #include "../utils/connection.h"
+#include "../utils/graphics.h"
 #include "../API/logger.h"
 
 #define SIZE 10
@@ -50,48 +51,8 @@ const char MENU2[] =
     "5) out                " ANSI_COLOR_GREY " ⟶   Esci dall'account" ANSI_COLOR_RESET "\n\n"
     ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
 
-// stampa una riga di asterischi
-void print_separation_line(){
-    struct winsize w;
-    int i;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 
-    for(i = 0; i < w.ws_col; i++)
-        printf("─");
-    
-    printf("\n");
-}
 
-// stampa centralmente il testo
-void print_centered(char* txt){
-    int size, len, i;
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-
-    len = strlen(txt);
-    size = (w.ws_col - len)/2;
-    
-    for (i = 0; i < size; i++) printf(" ");
-    printf("%s", txt);
-    for (i = 0; i < size; i++) printf(" ");
-    printf("\n");
-}
-
-void print_centered_dotted(char* txt){
-    int size, len, i;
-    struct winsize w;
-    ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-
-    len = strlen(txt);
-    size = (w.ws_col - len)/2;
-    
-    for (i = 0; i < size/2; i++) {printf(" ─");}
-    printf("%s", txt);
-    for (i = 0; i < size/2; i++) {printf("─ ");}
-    
-    if (w.ws_col != (size*2+len)) printf("─");
-    printf("\n");
-}
 
 // mostra l'HEADER per una nuova schermata
 void print_header(char* header){
@@ -289,14 +250,6 @@ void printChatHeader(char *dest){
     printf("\n");
 }
 
-void print_group_chat_header(){
-    system("clear");
-    print_separation_line(); // ***
-    print_centered("CHAT DI GRUPPO");
-    print_separation_line(); // ***
-    printf("\n");
-    fflush(stdout);
-}
 
 int send_msg_to_net(char *dst, char *msg){
     char buffer[MAX_REQUEST_LEN];
@@ -371,18 +324,6 @@ int hanging(){
 }
 
 
-// consente di formattare un messaggio secondo un determinato
-// standard, in modo da renderlo più gradevole alla vista
-void format_msg(char *formatted_msg, char *source, char* msg){
-    char src [MAX_USERNAME_SIZE + 2] = "[";
-
-    strcat(src, source);
-    strcat(src, "]");
-
-    sprintf(formatted_msg, "\033[0;35m%-10s\033[0m %s", src, msg);
-}
-
-
 // invia una richiesta "show" al network
 int show_request_to_net(char* mittente){
     char buffer[MAX_USERNAME_SIZE];
@@ -391,11 +332,15 @@ int show_request_to_net(char* mittente){
     return send_request_to_net(buffer);
 }
 
-int chat_request_to_net(char* mittente){
+// invia una richiesta di chat al network
+short int chat_request_to_net(char* mittente){
     char buffer[MAX_USERNAME_SIZE];
+    short int result;
+    
     sprintf(buffer, "%d %s", CHAT_CODE, mittente);
+    result = send_request_to_net(buffer);
 
-    return send_request_to_net(buffer);
+    return result;
 }
 
 
@@ -549,22 +494,29 @@ void start_chat(char *dst){
             sprintf(buffer, "%d %s", ADDUSER_CODE, user);
 
             // invio la richiesta al network
-            send_request_to_net_without_response(buffer);
+            ret = send_request_to_net(buffer);
+
+            // Se l'utente non fa parte della propria rubrica, restituisce un errore a schermo
+            if(ret < 0){
+                printf(ANSI_COLOR_RED "Utente non esistente o non presente in rubrica" ANSI_COLOR_RESET);
+                printf("\n\n");
+                fflush(stdout);
+            }
         }
 
     } while(strcmp(msg, "\\q") != 0);
-    slog("RICHIESTA DI USCIRE PER: %s", con->username);
     
     // riporta al menu principale
     memset(buffer, 0, MAX_REQUEST_LEN);
     sprintf(buffer, "%d", QUITCHAT_CODE);
 
+    // ritorna al menu principale
     send_request_to_net(buffer);
     system("clear");    // pulisco la schermata
     print_logged_menu(con->username, con->port);
 }
 
-
+// gestisce le richieste provenienti dal network
 void handle_message(){
     char buffer[MAX_REQUEST_LEN];
     short int code;
@@ -593,10 +545,7 @@ void handle_message(){
 // MAIN DELLA GUI
 void startGUI(){    
         short int ret;  
-
-        char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];
-      
-        //char buffer[MAX_REQUEST_LEN];
+        char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];      
         int i;
 
         // Stampa il menu delle scelte
@@ -638,155 +587,159 @@ void startGUI(){
 
             else if (i == fileno(stdin)){
             
+                // chiede l'inserimento di un comando
+                fscanf(stdin, "%[^\n]", command);
+                slog("STO CICLANDO(%d): %s", con->port, command);
+                fstdin();
+                switch(command_to_code(command)){
 
-            // chiede l'inserimento di un comando
-            
-            fscanf(stdin, "%[^\n]", command);
-            slog("STO CICLANDO(%d): %s", con->port, command);
-            fstdin();
-            switch(command_to_code(command)){
+                    case SIGNUP_CODE:
+                        sscanf(command, "%s %s", user, pw);
 
-                case SIGNUP_CODE:
-                    sscanf(command, "%s %s", user, pw);
+                        // per iscriversi bisogna non essere collegati!
+                        if(!login_limit()) {
+                            printf("Questa funzione è disponibile solo se non collegati.\n\n");
+                            break;
+                        }
 
-                    // per iscriversi bisogna non essere collegati!
-                    if(!login_limit()) {
-                        printf("Questa funzione è disponibile solo se non collegati.\n\n");
+                        ret = send_signup_request(user, pw);
+
+                        if(ret == 1){
+                            printf("Utente creato correttamente!\n\n");
+                        } else {
+                            printf("Esiste già un utente con questo nome, creazione annullata.\n\n");
+                        }
+
                         break;
-                    }
 
-                    ret = send_signup_request(user, pw);
+                    case LOGIN_CODE:
+                        sscanf(command, "%s %s", user, pw);
 
-                    if(ret == 1){
-                        printf("Utente creato correttamente!\n\n");
-                    } else {
-                        printf("Esiste già un utente con questo nome, creazione annullata.\n\n");
-                    }
+                        // per fare il login bisogna non essere collegati!
+                        if(!login_limit()) {
+                            printf("Questa funzione è disponibile solo se non collegati.\n\n");
+                            break;
+                        }
 
-                    break;
-
-                case LOGIN_CODE:
-                    sscanf(command, "%s %s", user, pw);
-
-                    // per fare il login bisogna non essere collegati!
-                    if(!login_limit()) {
-                        printf("Questa funzione è disponibile solo se non collegati.\n\n");
-                        break;
-                    }
-
-                    // invio della richiesta di login al server
-                    ret = send_login_request(user, pw);
-                    
-                    // se il login è andato a buon fine, salvo le
-                    // informazioni e stampo il nuovo meno per le richieste
-                    if (ret == 1) {
-                        STATUS = ONLINE;
-
-                        // setup della connessione
-                        strcpy(con->username, user);                     // copio il nome
-
-                        printf("Utente connesso correttamente!\n");     // mostro a schermo login riuscito
-                        fflush(stdout);
+                        // invio della richiesta di login al server
+                        ret = send_login_request(user, pw);
                         
-                        sleep(1);                                       // aspetto un secondo
-                        system("clear");                                // pulisco la shell
-                        print_logged_menu(con->username, con->port);
-                    }
+                        // se il login è andato a buon fine, salvo le
+                        // informazioni e stampo il nuovo meno per le richieste
+                        if (ret == 1) {
+                            STATUS = ONLINE;
 
-                    else if(ret == 0)
-                        printf("Credenziali errate, riprovare\n\n");
+                            // setup della connessione
+                            strcpy(con->username, user);                     // copio il nome
+
+                            printf("Utente connesso correttamente!\n");     // mostro a schermo login riuscito
+                            fflush(stdout);
+                            
+                            sleep(1);                                       // aspetto un secondo
+                            system("clear");                                // pulisco la shell
+                            print_logged_menu(con->username, con->port);
+                        }
+
+                        else if(ret == 0)
+                            printf("Credenziali errate, riprovare\n\n");
+                        
+                        else if (ret == -2)
+                            printf("Utente già connesso, non è possibile accedere contemporaneamente da più dispositivi.\n\n");
+                        
+                        break;
                     
-                    else if (ret == -2)
-                        printf("Utente già connesso, non è possibile accedere contemporaneamente da più dispositivi.\n\n");
-                    
-                    break;
-                
-                case CHAT_CODE:
-                    // prendo in input l'utente a cui si vuole scrivere
-                    sscanf(command, "%s", user);
+                    case CHAT_CODE:
+                        // prendo in input l'utente a cui si vuole scrivere
+                        sscanf(command, "%s", user);
 
-                    // blocco il comando se non si è online
-                    if(login_limit()) {
-                        printf("Questa funzione è disponibile solo se collegati.\n\n");
+                        // blocco il comando se non si è online
+                        if(login_limit()) {
+                            printf("Questa funzione è disponibile solo se collegati.\n\n");
+                            break;
+                        }   
+
+                        // controllo che l'utente non tenti di parlare con se stesso
+                        if (strcmp(user, con->username) == 0){
+                            printf("Non puoi parlare con te stesso!\n\n");
+                            break;
+                        }
+
+                        /*  [GUI->NET] invio al network la richiesta di realizzare una nuova chat
+                            In questa parte del programma si verifica tramite network se è possibile
+                            instaurare una connessione con il destinatario, se non è già stata creata.
+                            In base a tale risposta, tutti i messaggi inviati successivamente considereranno
+                            l'utente connesso o meno in base a ciò.*/
+                        ret = chat_request_to_net(user);
+                        if (ret < 0){
+                            printf(ANSI_COLOR_RED "Utente non esistente o non presente in rubrica" ANSI_COLOR_RESET);
+                            printf("\n\n");
+                            fflush(stdout);
+
+                            break;
+                        }
+
+
+                        // TODO: controllare se il nome è in rubrica e corretto
+
+
+                        // mostra la parte superiore della chat
+                        printChatHeader(user);
+
+                        // mostra a schermo la cronologia e ne consente l'aggiornamento
+                        print_historic(con->username, user);
+
+                        // porta l'utente alla schermata di inserimento messaggi
+                        start_chat(user);
                         break;
-                    }   
 
-                    // controllo che l'utente non tenti di parlare con se stesso
-                    if (strcmp(user, con->username) == 0){
-                        printf("Non puoi parlare con te stesso!\n\n");
+                    case HANGING_CODE:
+                        if(login_limit()) {
+                            printf("Questa funzione è disponibile solo se collegati.\n\n");
+                            break;
+                        }
+
+                        ret = hanging();
+                        if (ret < 0) break;
                         break;
-                    }
 
-                    /*  [GUI->NET] invio al network la richiesta di realizzare una nuova chat
-                        In questa parte del programma si verifica tramite network se è possibile
-                        instaurare una connessione con il destinatario, se non è già stata creata.
-                        In base a tale risposta, tutti i messaggi inviati successivamente considereranno
-                        l'utente connesso o meno in base a ciò.*/
-                    chat_request_to_net(user);
+                    case SHOW_CODE:
+                        // prendo in input il nome dell'utente
+                        sscanf(command, "%s", user);
 
+                        if(login_limit()) {
+                            printf("Questa funzione è disponibile solo se collegati.\n\n");
+                            break;
+                        }   
 
-                    // TODO: controllare se il nome è in rubrica e corretto
+                        // controllo che l'utente non tenti di parlare con se stesso
+                        if (strcmp(user, con->username) == 0){
+                            printf("Non puoi vedere i nuovi messaggi con te stesso!\n\n");
+                            break;
+                        }
 
-
-                    // mostra la parte superiore della chat
-                    printChatHeader(user);
-
-                    // mostra a schermo la cronologia e ne consente l'aggiornamento
-                    print_historic(con->username, user);
-
-                    // porta l'utente alla schermata di inserimento messaggi
-                    start_chat(user);
-                    slog("SONO USCITO DALLA CHAT AVVIATA: %s", con->username);
-                    break;
-
-                case HANGING_CODE:
-                    if(login_limit()) {
-                        printf("Questa funzione è disponibile solo se collegati.\n\n");
+                        ret = show(user);
                         break;
-                    }
 
-                    ret = hanging();
-                    if (ret < 0) break;
-                    break;
+                    // l'utente ha fatto "out" da shell
+                    case LOGOUT_CODE:
+                        STATUS = OFFLINE;
 
-                case SHOW_CODE:
-                    // prendo in input il nome dell'utente
-                    sscanf(command, "%s", user);
+                        // TODO: verificare il corretto funzionamento
+                        send_logout_request();
 
-                    if(login_limit()) {
-                        printf("Questa funzione è disponibile solo se collegati.\n\n");
+                        // stampo il menu iniziale
+                        system("clear");
+                        print_menu();
                         break;
-                    }   
 
-                    // controllo che l'utente non tenti di parlare con se stesso
-                    if (strcmp(user, con->username) == 0){
-                        printf("Non puoi vedere i nuovi messaggi con te stesso!\n\n");
+                    // scelta errata
+                    default:
+                        printf("Scelta scorretta, reinserire: ");
                         break;
-                    }
+                }
 
-                    ret = show(user);
-                    break;
-
-                // l'utente ha fatto "out" da shell
-                case LOGOUT_CODE:
-                    STATUS = OFFLINE;
-
-                    // TODO: verificare il corretto funzionamento
-                    send_logout_request();
-
-                    // stampo il menu iniziale
-                    system("clear");
-                    print_menu();
-                    break;
-
-                // scelta errata
-                default:
-                    printf("Scelta scorretta, reinserire: ");
-                    break;
-            }
-
-        if (ret == -1) printf("Non è stato possibile inviare la richiesta.\n");
-        } // chiude if
+            if (ret == -1) printf("Non è stato possibile inviare la richiesta.\n");
+            } // chiude if
         } // chiude for
 
         } while (1);
