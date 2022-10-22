@@ -602,11 +602,13 @@ void startGUI(){
                             break;
                         }
 
+                        // manda la richiesta di signup
                         ret = send_signup_request(user, pw);
 
                         if(ret == 1){
                             printf("Utente creato correttamente!\n\n");
-                        } else {
+                        } 
+                        else if(ret == 0) {
                             printf("Esiste già un utente con questo nome, creazione annullata.\n\n");
                         }
 

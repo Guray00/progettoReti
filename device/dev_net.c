@@ -1158,9 +1158,13 @@ void gui_handler(){
             if (ret < 0) break;
 
             send_server_request(read_buffer);
+
+            // 1 creato, 0 se non creato, -1 errore
             ret = recive_code_from_server();
 
-            // TODO: la signup dovrebbe staccare dal server            
+            // disconnettiamo dal server
+            FD_CLR(sd, &master);
+            close(sd);
             break;
 
         // LOGIN REQUEST
@@ -1194,7 +1198,7 @@ void gui_handler(){
                 FD_CLR(sd, &master);
                 break;
             }  
-            // in tutti gli altri casi torno indietro
+            // in tutti gli altri (negativi) casi torno indietro
             else if( ret < 0) 
                 break;
 
@@ -1202,7 +1206,6 @@ void gui_handler(){
             sprintf(hash_buffer,"%s %s", con->username, args);
             my_hash = hash(hash_buffer);
 
-            //slog("IL MIO HASH [%s][%s | %s]: %lu", read_buffer, con->username, args, my_hash);
             break;
 
         case CHAT_CODE:
@@ -1221,13 +1224,6 @@ void gui_handler(){
         
         // CHECK ONLINE REQUEST
         case ISONLINE_CODE:
-            /*ret = send_server_request(read_buffer);
-            if(ret < 0) break;
-
-            ret = recive_code_from_server();*/
-            // nota: buffer contiene il nome utente
-            /*ret = find_connection(&con, buffer) != NULL ? 1 :  0;*/
-
             // restituisco 1 se almeno un utente ha ricevuto il messaggio
             ret = 0;
             for(p = partecipants; p != NULL; p = p->next){

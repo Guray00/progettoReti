@@ -13,6 +13,8 @@
 #include "./API/logger.h"
 #include "./utils/costanti.h"
 #include "./utils/connection.h"
+#include "./utils/graphics.h"
+
 
 // dichiarazione variabili ======================
 
@@ -48,13 +50,13 @@ struct connection *con;
 // definizione costanti =========================
 const char ADDRESS[] = "127.0.0.1";
 
-/*
+
 const char MENU[] = 
     "1) help " ANSI_COLOR_GREY " ⟶   Mostra questa pagina di informazioni" ANSI_COLOR_RESET "\n"
     "2) list " ANSI_COLOR_GREY " ⟶   Mostra quali utenti sono attualmente online" ANSI_COLOR_RESET "\n"
     "2) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n"
     ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
-*/
+
 
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
@@ -142,23 +144,6 @@ void intHandler() {
     // genero la richiesta
     sprintf(buffer, "%d %s", code, "server");
 
-    // notifico tutti i dispositivi della disconnessione
-    /*
-    for(i = 0; i <= fd_max; i++){
-
-        // se il file descriptor è attivo
-        if (FD_ISSET(i, &master) && i != sd){
-
-            // invio la richiesta
-            ret = send_request(i, buffer);
-            if(ret > 0){
-
-                // se è andata a buon fine termino l'iesimo socket
-                close(i);
-                slog("==> chiuso socket %d", i);
-            }
-        }
-    }*/
 
     // per ogni device connesso notifico la disconnesione
     for (p = con->next; p!=NULL; ){
@@ -182,7 +167,7 @@ void intHandler() {
 
 void pipeHandler() {
     slog("[PIPE ERROR]");
-   // exit(0);
+    exit(0);
 }
 
 // calcola l'hash di una stringa ricevuta
@@ -241,9 +226,6 @@ int add_entry_register(char* username){
         perror("Erroe aggiunta entry");
         return 0;
     }
-
-    // recupero data e ora
-    //time(&t);
 
     // essendo la prima connessione, login e logout coincidono (utente non connesso)
     ret = (fprintf(file, "%s | %d | %lu | %lu\n", username, PORT_NOT_KNOWN,  (unsigned long)time(NULL), (unsigned long)time(NULL)) > 0) ? 1 : 0;
@@ -397,7 +379,6 @@ int signup(struct user usr){
 
     // se non esiste già un utente registrato lo registriamo
     ret = find_entry_users(usr.username);
-    slog("ret vale: %d", ret);
     if (ret == 0){
 
         // aggiungo all'elenco degli utenti
@@ -472,7 +453,6 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
 
 int login(int sock, struct user usr, int port){
 
-    //unsigned long test;
     int flag = auth(usr);
 
     if (flag == 1){
@@ -484,9 +464,6 @@ int login(int sock, struct user usr, int port){
         // imposta l'username alla connessione
         set_connection(&con, usr.username, sock);        
     }
-
-    // test = generate_user_hash(usr.username);
-    //printf("calcolato hash: %lu\n", test);
 
     return flag;
 }
@@ -782,19 +759,42 @@ void send_whois(int device, char* buf){
     send(i, (void*) &response, sizeof(uint16_t), 0);
 }
 
-/*
+
 void print_menu(){
     print_separation_line();
     print_centered("MENU SERVER");
     print_separation_line();
     printf(MENU);
+    fflush(stdout);
 }
 
-
-void gui_handler(){
-
+// ripulisce lo standard input
+void fstdin(){
+    int c;
+    while ((c = getchar()) != '\n' && c != EOF);
 }
-*/
+
+void gui_server_handler(){
+    char command[MAX_REQUEST_LEN];
+
+    fscanf(stdin, "%s", command);
+    fstdin();
+
+    if(strcmp(command, "exit") == 0){
+        intHandler();
+    }
+
+    else if (strcmp(command, "help") == 0){
+        system("clear");
+        print_menu();
+    }
+
+    else {
+        printf(ANSI_COLOR_RED "Comando errato, riprovare." ANSI_COLOR_RESET);
+        printf("\n\n");
+        fflush(stdout);
+    }
+}
 
 int main(int argc, char* argv[]){
 
@@ -829,8 +829,8 @@ int main(int argc, char* argv[]){
     FD_SET(sd, &master);                // aggiungo il socket di ricezione tra quelli monitorati
     if(sd > fd_max) fd_max = sd;
 
-    //FD_SET(fileno(stdin), &master);
-    //fd_max = (fileno(stdin) > fd_max) ? fileno(stdin) : fd_max;
+    FD_SET(fileno(stdin), &master);
+    fd_max = (fileno(stdin) > fd_max) ? fileno(stdin) : fd_max;
 
     // inizializzo la lista di connessioni
     con = (void*) malloc(sizeof(struct connection));
@@ -840,7 +840,7 @@ int main(int argc, char* argv[]){
     strcpy(con->username, "server");
     con->port = port;
 
-    //print_menu();
+    print_menu();
 
     while(1){
 
@@ -858,19 +858,18 @@ int main(int argc, char* argv[]){
         for(i = 0; i <= fd_max; i++){
 
             if(FD_ISSET(i, &readers)){
-                slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
-
                 // verifico se la richiesta è sul socket di accettazione,
                 // dunque se è pendente una nuova richiesta di connessione
                 if(i == sd){
                     newConnection();
                 }
 
-                /*
+                // inserimento input                
                 if (i == fileno(stdin)){
-                    gui_handler();
+
+                    // gestisce i comandi digitati
+                    gui_server_handler();
                 }
-                */
                
                 // in tutti gli altri casi sono i devices che effettuano le richieste
                 else {
@@ -882,6 +881,7 @@ int main(int argc, char* argv[]){
                     char msg[MAX_MSG_SIZE];
                     char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; 
 
+                    slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
 
                     bytes_to_receive = sizeof(buffer);
                     while(bytes_to_receive > 0) {
@@ -925,6 +925,10 @@ int main(int argc, char* argv[]){
                             ret = signup(usr);
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
+
+                            // dopo una signup, avviene sempre la rimossione della connessione
+                            close_connection_by_socket(&con, i);
+                            FD_CLR(i, &master);
                             break;
                         
                         // LOGIN
@@ -965,7 +969,7 @@ int main(int argc, char* argv[]){
                                  1: utente raggiunto e invio di credenziali 
                             */
 
-                            
+                            // verifica se l'utente è online
                             ret = isOnline(buffer);
 
                             // se il dispositivo è raggiungibile

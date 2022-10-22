@@ -9,7 +9,7 @@ dev: dev.o
 
 # make rule per il server
 serv: serv.o
-	gcc	-Wall serv.o ./API/logger.c ./utils/costanti.h ./utils/connection.c -o serv
+	gcc	-Wall serv.o ./API/logger.c ./utils/costanti.h ./utils/*.c -o serv
 
 # pulizia dei file della compilazione (eseguito con ‘make clean’ da terminale)
 clean:
