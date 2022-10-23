@@ -146,13 +146,13 @@ void send_request_to_net_without_response(char* buffer){
 }
 
 // effettua una richiesta di login
-int send_login_request(char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
+int send_login_request(int server_port, char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
     
     char buffer[MAX_REQUEST_LEN];
     int ret;
 
     // genero la richiesta
-    sprintf(buffer, "%hd %s|%s", LOGIN_CODE, user, pw);
+    sprintf(buffer, "%hd %d %s %s", LOGIN_CODE, server_port, user, pw);
     ret = send_request_to_net(buffer);
     
     return ret;
@@ -172,14 +172,14 @@ int send_logout_request(){
 }
 
 // effettua una richiesta di login
-int send_signup_request(char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
+int send_signup_request(int server_port, char user[MAX_USERNAME_SIZE], char pw[MAX_PW_SIZE]){
     
     // instanzio le variabili
     char buffer[MAX_REQUEST_LEN];
     int ret;
 
     // genero la richiesta
-    sprintf(buffer, "%hd %s|%s", SIGNUP_CODE, user, pw);
+    sprintf(buffer, "%hd %d %s %s", SIGNUP_CODE, server_port, user, pw);
     ret = send_request_to_net(buffer);    
     return ret;
 }
@@ -546,7 +546,7 @@ void handle_message(){
 void startGUI(){    
         short int ret;  
         char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE], buffer[MAX_REQUEST_LEN];      
-        int i;
+        int i, server_port;
         char path[200];
 
         // Stampa il menu delle scelte
@@ -595,7 +595,7 @@ void startGUI(){
                 switch(command_to_code(command)){
 
                     case SIGNUP_CODE:
-                        sscanf(command, "%s %s", user, pw);
+                        sscanf(command, "%d %s %s", &server_port, user, pw);
 
                         // per iscriversi bisogna non essere collegati!
                         if(!login_limit()) {
@@ -604,7 +604,7 @@ void startGUI(){
                         }
 
                         // manda la richiesta di signup
-                        ret = send_signup_request(user, pw);
+                        ret = send_signup_request(server_port, user, pw);
 
                         if(ret == 1){
                             printf("Utente creato correttamente!\n\n");
@@ -616,7 +616,7 @@ void startGUI(){
                         break;
 
                     case LOGIN_CODE:
-                        sscanf(command, "%s %s", user, pw);
+                        sscanf(command, "%d %s %s", &server_port, user, pw);
 
                         // per fare il login bisogna non essere collegati!
                         if(!login_limit()) {
@@ -625,7 +625,7 @@ void startGUI(){
                         }
 
                         // invio della richiesta di login al server
-                        ret = send_login_request(user, pw);
+                        ret = send_login_request(server_port, user, pw);
                         
                         // se il login è andato a buon fine, salvo le
                         // informazioni e stampo il nuovo meno per le richieste
@@ -681,10 +681,6 @@ void startGUI(){
                             break;
                         }
 
-
-                        // TODO: controllare se il nome è in rubrica e corretto
-
-
                         // mostra la parte superiore della chat
                         printChatHeader(user);
 
@@ -726,8 +722,6 @@ void startGUI(){
                     // l'utente ha fatto "out" da shell
                     case LOGOUT_CODE:
                         STATUS = OFFLINE;
-
-                        // TODO: verificare il corretto funzionamento
                         send_logout_request();
 
                         // stampo il menu iniziale
@@ -766,7 +760,10 @@ void startGUI(){
                         break;
                 }
 
-            if (ret == -1) printf("Non è stato possibile inviare la richiesta.\n");
+                if (ret == -1) {
+                    printf(ANSI_COLOR_RED "Non è stato possibile inviare la richiesta.\n\n" ANSI_COLOR_RESET);
+                    fflush(stdout);
+                }
             } // chiude if
         } // chiude for
 

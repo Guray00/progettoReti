@@ -880,6 +880,7 @@ int main(int argc, char* argv[]){
                     char *buf = buffer;   
                     char msg[MAX_MSG_SIZE];
                     char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; 
+                    //char user[MAX_USERNAME_SIZE], password[MAX_PW_SIZE];
 
                     slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
 
@@ -917,10 +918,12 @@ int main(int argc, char* argv[]){
 
                         // SIGNUP
                         case SIGNUP_CODE:     
-                            args = strtok(buffer, "|");
-                            strcpy(usr.username, args);
-                            args = strtok(NULL, "|");
-                            strcpy(usr.pw, args);
+                            // args = strtok(buffer, "|");
+                            // strcpy(usr.username, args);
+                            // args = strtok(NULL, "|");
+                            // strcpy(usr.pw, args);
+                            sscanf(buffer, "%s %s", usr.username, usr.pw);
+
 
                             ret = signup(usr);
                             response = htons(ret);
@@ -934,12 +937,14 @@ int main(int argc, char* argv[]){
                         // LOGIN
                         case LOGIN_CODE:     
                             // scompongo il buffer in [username | password | port]
-                            args = strtok(buffer, "|");
+                           /* args = strtok(buffer, " ");
                             strcpy(usr.username, args);
-                            args = strtok(NULL, "|");
+                            args = strtok(NULL, " ");
                             strcpy(usr.pw, args);
-                            args = strtok(NULL, "|");
-                            port = atoi(args);
+                            args = strtok(NULL, " ");
+                            port = atoi(args);*/
+                            sscanf(buffer, "%s %s %d", usr.username, usr.pw, &port);
+
 
                             ret = login(i, usr, port);
 

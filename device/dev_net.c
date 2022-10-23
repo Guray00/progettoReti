@@ -517,8 +517,6 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
     sscanf(buffer, "%d %s", &response, address);
     
 
-    // TODO: testare la corretta ricezione dei dati
-
     // se l'utente è online la risposta sarà > 0
     if (response > 0){
 
@@ -1272,8 +1270,9 @@ void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
     short int code;                     // codice della richiesta effettuata
-    //char answer[4];                     // codice della risposta
-    char* args;
+    int server_port;                    // porta su cui contattare il server
+    // char* args;
+    char username[MAX_USERNAME_SIZE], password[MAX_USERNAME_SIZE];
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
     struct connection *p, *q;
 
@@ -1287,12 +1286,14 @@ void gui_handler(){
         // SIGNUP REQUEST
         case SIGNUP_CODE:
             // la prima cosa da fare è creare la connessione con il server
-            ret = init_server_connection(4242);
+            sscanf(buffer, "%d %s %s", &server_port, username, password);
+            ret = init_server_connection(server_port);
             // se non è stato possibile connettersi al server
             // chiedo di tornare indietro
             if (ret < 0) break;
 
-            send_server_request(read_buffer);
+            sprintf(buffer, "%hd %s %s", SIGNUP_CODE, username, password);
+            send_server_request(buffer);
 
             // 1 creato, 0 se non creato, -1 errore
             ret = recive_code_from_server();
@@ -1304,24 +1305,24 @@ void gui_handler(){
 
         // LOGIN REQUEST
         case LOGIN_CODE:
-
+            sscanf(buffer, "%d %s %s", &server_port, con->username, password);
             // la prima cosa da fare è creare la connessione con il server
-            ret = init_server_connection(4242);
+            ret = init_server_connection(server_port);
 
             // se non è stato possibile connettersi al server
             // chiedo di tornare indietro
             if (ret < 0) break;
             
             // recupero password e porta
-            sprintf(read_buffer, "%s|%d", read_buffer, con->port);
-            args = strtok(buffer, "|");
-            strcpy(con->username, args);
-            args = strtok(NULL, "|");
+            // sprintf(read_buffer, "%s|%d", read_buffer, con->port);
+            // args = strtok(buffer, "|");
+            // strcpy(con->username, args);
+            // args = strtok(NULL, "|");
 
             // invio la richiesta di accesso al server
-            ret = send_server_request(read_buffer);
+            sprintf(buffer, "%hd %s %s %d", LOGIN_CODE, con->username, password, con->port);
+            ret = send_server_request(buffer);
             if (ret <= 0) break;
-
 
             // 1 se è connesso, 0 se non trovato, -2 se già acceduto
             ret = recive_code_from_server();
@@ -1338,7 +1339,7 @@ void gui_handler(){
                 break;
 
             // genero il mio hash al login
-            sprintf(hash_buffer,"%s %s", con->username, args);
+            sprintf(hash_buffer,"%s %s", con->username, password);
             my_hash = hash(hash_buffer);
 
             break;
