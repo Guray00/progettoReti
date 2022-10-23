@@ -150,10 +150,18 @@ void logout_server(){
     // devo allora memorizzare in locale il timestamp in modo da aggiornarlo di nuovo
     // al prossimo login
     else {
-        slog("salvo timestamp del logout in locale");
+        // se non sono loggato non è importante salvare il timestamp
+        if(strcmp(con->username, "") == 0) return;
+
         sprintf(path, "./devices_data/%s/%s", con->username, LOGOUT_FILE);
+        slog("salvo timestamp del logout in locale: %s", path);
         file = fopen(path, "w");
+        if(file < 0){
+            perror("errore salvataggio timestamp");
+            exit(-1);
+        }
         
+        // scrivo nel file il timestamp del logout
         fprintf(file, "%lu", (unsigned long) time(NULL));
         fclose(file);
     }

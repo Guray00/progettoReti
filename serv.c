@@ -142,8 +142,15 @@ void intHandler() {
     struct connection *p;
     FILE *file;
 
+
+    // DEPRECATO
     // memorizzo che ho lasciato dei dispositivi con l'accesso
+    /*
     if(connection_size(&con) > 1){
+        // genero la cartella se non esiste
+        system("mkdir -p ./server_data/");
+
+        // creo il file per memorizzare l'uscita errata
         file = fopen("./server_data/hardclose", "w");
         if(file < 0){
             exit(-1);
@@ -157,12 +164,12 @@ void intHandler() {
             fclose(file);
             system("rm ./server_data/hardclose");
         }
-    }
+    }*/
 
     // genero la richiesta
     sprintf(buffer, "%d %s", code, "server");
 
-
+    
     // per ogni device connesso notifico la disconnesione
     for (p = con->next; p!=NULL; ){
 
@@ -509,15 +516,15 @@ int login(int sock, struct user usr, int port, unsigned long hardclose){
         set_connection(&con, usr.username, sock);        
     }
     else if(flag == -2 && hardclose != 0){
-        if ((file = fopen("./server_data/hardclose", "r"))) {
-            fclose(file);
+        //if ((file = fopen("./server_data/hardclose", "r"))) {
+        //    fclose(file);
             
             //system("rm ./server_data/hardclose");
-            update_logout_entry(usr.username, hardclose);
-            add_login_entry(usr.username, port);
-            set_connection(&con, usr.username, sock);    
-            flag = 1;    
-        }
+        update_logout_entry(usr.username, hardclose);
+        add_login_entry(usr.username, port);
+        set_connection(&con, usr.username, sock);    
+        flag = 1;    
+        //}
     }
 
     return flag;
@@ -829,6 +836,54 @@ void fstdin(){
     while ((c = getchar()) != '\n' && c != EOF);
 }
 
+void print_online_header(){
+    print_separation_line();
+    print_centered("UTENTI ONLINE");
+    print_separation_line();
+    printf("\n");
+    fflush(stdout);
+}
+
+int print_online(){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE], simb, pw[MAX_PW_SIZE];
+
+    char *line = NULL;
+    ssize_t read;
+    size_t l;
+
+    system("clear");
+    print_online_header();
+
+    file = fopen(FILE_USERS, "r");
+    if(!file) {
+        perror("Errore apertura file utenti");
+        return -1;
+    }
+
+    while((read=getline(&line, &l, file)) != -1){
+        line[strcspn(line, "\n")] = 0;
+
+        sscanf(line, "%s %c %s", usr, &simb, pw);
+        if(isOnline(usr)){
+            printf("• %s%-16s%s - ", ANSI_COLOR_BLUE, usr, ANSI_COLOR_RESET);
+            printf(ANSI_COLOR_GREEN "online\n" ANSI_COLOR_RESET);
+        }
+    }
+
+    printf("\n\nPremi [INVIO] per tornare indietro: ");
+    fflush(stdout);
+    getchar();  // aspetto la pressione di "invio"
+
+    fclose(file);
+    return 0;
+}
+
+void gui_int_handler(){
+    kill(getppid(), SIGINT);
+    exit(0);
+}
+
 void gui_server_handler(){
     char command[MAX_REQUEST_LEN];
 
@@ -836,10 +891,16 @@ void gui_server_handler(){
     fstdin();
 
     if(strcmp(command, "esc") == 0){
-        intHandler();
+        gui_int_handler();
     }
 
     else if (strcmp(command, "help") == 0){
+        system("clear");
+        print_menu();
+    }
+
+    else if(strcmp(command, "list") == 0){
+        print_online();
         system("clear");
         print_menu();
     }
@@ -851,24 +912,21 @@ void gui_server_handler(){
     }
 }
 
+
+
 int main(int argc, char* argv[]){
 
     // variabili di utility
     char buffer[MAX_REQUEST_LEN];
     struct user usr;
     
-    //  assegna la gestione del segnale di int
-    signal(SIGINT, intHandler);
-    signal(SIGSEGV, intHandler);
-    signal(SIGPIPE, pipeHandler);
-
-
     // individua la porta da utilizzare
     int port = findPort(argc, argv);    
 
     // utilizzato per debug
     init_logger("./.log");
 
+    
     slog("*********************************");
     slog("> server started on port: %d", port);
     slog("*********************************");    
@@ -879,13 +937,9 @@ int main(int argc, char* argv[]){
     // imposto di default alla richiesta errata
     request = -1;
 
-    FD_ZERO(&master);                   // pulisco il master
-    FD_ZERO(&readers);                  // pulisco i readers
-    FD_SET(sd, &master);                // aggiungo il socket di ricezione tra quelli monitorati
-    if(sd > fd_max) fd_max = sd;
 
-    FD_SET(fileno(stdin), &master);
-    fd_max = (fileno(stdin) > fd_max) ? fileno(stdin) : fd_max;
+    //FD_SET(fileno(stdin), &master);
+    //fd_max = (fileno(stdin) > fd_max) ? fileno(stdin) : fd_max;
 
     // inizializzo la lista di connessioni
     con = (void*) malloc(sizeof(struct connection));
@@ -895,7 +949,27 @@ int main(int argc, char* argv[]){
     strcpy(con->username, "server");
     con->port = port;
 
-    print_menu();
+    pid = fork();
+
+    if(pid == 0){
+        signal(SIGINT, gui_int_handler);
+        print_menu();
+
+        while(1){
+            gui_server_handler();
+        }
+    }
+
+    else {
+        //  assegna la gestione del segnale di int
+        signal(SIGINT, intHandler);
+        signal(SIGSEGV, intHandler);
+        signal(SIGPIPE, pipeHandler);
+        
+        FD_ZERO(&master);                   // pulisco il master
+        FD_ZERO(&readers);                  // pulisco i readers
+        FD_SET(sd, &master);                // aggiungo il socket di ricezione tra quelli monitorati
+        if(sd > fd_max) fd_max = sd;
 
     while(1){
 
@@ -920,11 +994,11 @@ int main(int argc, char* argv[]){
                 }
                 
                 // inserimento input                
-                else if (i == fileno(stdin)){
+                /*else if (i == fileno(stdin)){
 
                     // gestisce i comandi digitati
                     gui_server_handler();
-                }
+                }*/
                
                 // in tutti gli altri casi sono i devices che effettuano le richieste
                 else {
@@ -967,18 +1041,13 @@ int main(int argc, char* argv[]){
                             // rimuovo dalla lista la connessione i-esima
                             close_connection_by_socket(&con, i);
 
-                            // rimuovo la connessione dai 
-                            // socket ascoltati
+                            // rimuovo la connessione dai socket ascoltati
                             FD_CLR(i, &master);
 
                             break;
 
                         // SIGNUP
                         case SIGNUP_CODE:     
-                            // args = strtok(buffer, "|");
-                            // strcpy(usr.username, args);
-                            // args = strtok(NULL, "|");
-                            // strcpy(usr.pw, args);
                             sscanf(buffer, "%s %s", usr.username, usr.pw);
 
 
@@ -1029,11 +1098,6 @@ int main(int argc, char* argv[]){
                             // se il dispositivo è raggiungibile
                             if (ret > 0){
                                 char req [MAX_REQUEST_LEN];
-
-                                // informo il device che sta per giungere una richiesta
-                                // sprintf(req, "%d %s", CREATECON_CODE, get_username_by_connection(&con, i));
-                                // send_request(find_connection(&con, buffer)->socket, req);
-
                                 // restituisco i dati a chi ha chiesto
                                 sprintf(buffer, "%d %s", ret, ADDRESS);
                             }
@@ -1074,6 +1138,7 @@ int main(int argc, char* argv[]){
             }
         }
     }
+    } // ELSE
 
     return 0;
 }
