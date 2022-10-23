@@ -28,8 +28,7 @@
 extern int to_child_fd[2];      // pipe NET->GUI
 extern int to_parent_fd[2];     // pipe GUI->NET
 extern int pid;                 // pid del processo
-extern int DEVICE_PORT;
-//char SCENE[MAX_USERNAME_SIZE];
+extern int DEVICE_PORT;         // porta del device
 
 // informazioni sulle connessioni attive
 extern struct connection *con;   
@@ -74,7 +73,7 @@ unsigned long hash(char *str){
     return hash;
 }
 
-
+// permette di eseguire il logout verso un solo device
 void logout_device(int fd){
     char buffer[MAX_REQUEST_LEN];
     struct connection *tmp;
@@ -704,6 +703,56 @@ int send_msg(char* buffer){
     return ret;
 }
 
+// Consente l'invio di un file verso un device destinatario
+int send_file(int device, char* path){
+    FILE *file;
+    char cmd[100];
+    char buffer[MAX_REQUEST_LEN];
+    char real_path[200];
+    char c;
+    int size;
+
+    // recupero il path della cartella
+    sprintf(real_path, "./devices_data/%s/%s", con->username, path);
+
+    // mi assicuro dell'esistenza del file generandolo su bisogno
+    sprintf(cmd, "mkdir -p ./devices_data/%s/ && touch %s", con->username, real_path);   // mi assicuro che il file esista
+    system(cmd);
+    
+    // apro il file
+    file = fopen(real_path, "r");
+    if(!file) {
+        perror("Errore apertura file per l'invio");
+        return -1;
+    }
+
+    // calcolo dimensione file
+    fseek(file, 0L, SEEK_END);
+    size = ftell(file);
+
+    slog("Invio del file %s con dimensione %d", real_path, size);
+
+
+    // invia il numero di byte da inviare all'altro dispositio
+    rewind(file);
+    sprintf(buffer, "%d", size);
+    send_device_request(device, buffer); 
+    
+    do{
+        c   = fgetc(file);
+        ret = send(device, &c, 1, 0);
+        if(ret < 0){
+            perror("errore invio file");
+            return -1;
+        }    
+    } while(c != EOF);
+    
+        
+    // chiudo il file
+    fclose(file);
+    return 1;
+}
+
 // funzione utilizzata per la ricezione di file
 int recive_file(int fd, char *path){
     FILE* file;
@@ -713,7 +762,6 @@ int recive_file(int fd, char *path){
     int size;
     char c;
 
-    //if (!FD_ISSET(fd, &master)) return -1;
 
     strcpy(dirpath, path);    
     dirname(dirpath);
@@ -726,12 +774,14 @@ int recive_file(int fd, char *path){
     // ricevo il numero di byte che mi verranno inviati
     recive_from_device(buffer, fd);
     sscanf(buffer, "%d", &size);
+    slog("buffer=> %s, sto per ricevere %d byte", buffer, size);
 
     // =========================
     while(size >= 0){
-        ret = recv(sd, &c, 1, 0);
+        ret = recv(fd, &c, 1, 0);
         if(ret < 0){
             perror("errore ricezione file");
+            slog("errore ricezione file");
             return -1;
         }
 
@@ -739,10 +789,24 @@ int recive_file(int fd, char *path){
         if (size > -1) fputc(c, file);
     }
     // =========================
+    slog("ho finito di ricevere");
 
     // chiudo il file
     fclose(file);
     return 0;
+}
+
+// riceve un file da un altro device
+int recive_file_from_device(int fd, char* path){
+    char realpath[200];
+    
+    // converto la richiesta
+    sprintf(realpath, "./devices_data/%s/%s", con->username, path);
+    slog("salverà in: %s", realpath);
+
+    ret = recive_file(fd, realpath);
+    slog("recive_file_from_device riceve %d", ret);
+    return ret;
 }
 
 int hanging_request_server(){
@@ -1013,10 +1077,11 @@ int add_user(char *dst){
 // gestisce la ricezione di richiesta da altri devices
 void device_handler(int device){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
+    char tmp[MAX_REQUEST_LEN];          // buffer temporaneo
     short int code;                     // codice della richiesta effettuata
     struct connection *newp;            // per la richiesta di nuovo partecipante
 
-    // ricevo dal buffer
+    // ricevo dal buffer la richiesta
     recive_from_device(buffer, device);
     sscanf(buffer, "%hd %[^\t\n]", &code, buffer);
 
@@ -1081,7 +1146,6 @@ void device_handler(int device){
 
             else {
                 ret = 0;
-
             }
 
             // restitusco l'esito dell'invito: 1 se è stato accettato, 0 se invece è stato respinto
@@ -1120,6 +1184,25 @@ void device_handler(int device){
             if(connection_size(&partecipants) < 1 && GROUPMODE == 1) {
                 notify("Nessun utente attualmente in chat", ANSI_COLOR_CYAN);   
             }
+
+            break;
+
+        // ricevuta richiesta di ricezione file
+        case SHARE_CODE:
+            // nota: buffer contiene il path in cui salvare il file
+            slog("sto per ricevere ->%s<-", buffer);
+            ret = recive_file_from_device(device, buffer);
+
+            if(ret >= 0) {
+                sprintf(tmp, "Ricevuto file \"%s\"", buffer);
+                notify(tmp, ANSI_COLOR_GREEN);
+            }
+            else {
+                sprintf(tmp, "Errore ricezione file \"%s\"", buffer);
+                notify(tmp, ANSI_COLOR_RED);
+            }
+
+            break;
     }
 }
 
@@ -1130,6 +1213,58 @@ int send_quitchat_to_device(int fd){
     sprintf(buffer, "%d %s", QUITCHAT_CODE, con->username);
     ret = send_device_request(fd, buffer);
 
+    return ret;
+}
+
+// permette di effettuare lo share di un messaggio
+int share_to_device(char* buffer){
+    char user[MAX_USERNAME_SIZE];
+    char path[200];
+    struct connection *dst_connection;
+
+    sscanf(buffer, "%s %[^\t\n]", user, path);
+
+    // controllo che l'utente sia nella rubrica
+    ret = check_user_in_contacts(user);
+    if(ret < 0) return ret;    
+
+    // verifico se esiste una connessione precedente con il device
+    dst_connection = find_connection(&con, user);
+        
+    // se non trovo nessuna connessione
+    if(dst_connection == NULL){
+
+        // chiedo di instaurare una connessione con l'utente
+        // l'utente potrebbe però essere offline (prima o verificato
+        // se la connessione esisteva, non se può essere creata) 
+        slog("--- creo nuova connessione ---");
+        dst_connection = create_connection(user);
+
+        // se ancora non è stato possibile realizzarla,
+        // allora l'utente è offline
+        if (dst_connection == NULL){
+            ret = -2;
+        }
+
+        // la connessione adesso è stata stabilita
+        else {
+            // invio il file
+            ret = send_request(SHARE_CODE, dst_connection->socket, path);
+            if(ret < 0) return ret;
+
+            ret = send_file(dst_connection->socket, path);
+        }
+    }
+
+    // connessione trovata perchè creata precedentemente
+    else {
+        // invio il file
+        ret = send_request(SHARE_CODE, dst_connection->socket, path);
+        if(ret < 0) return ret;
+        
+        ret = send_file(dst_connection->socket, path);
+    }
+    
     return ret;
 }
 
@@ -1254,10 +1389,9 @@ void gui_handler(){
 
         // gestisce la richiesta di disconnessione
         case LOGOUT_CODE:
-            slog("[GUI->NET:%d] ricevuto richiesta di disconnessione", con->port);
             logout_devices();
             logout_server();
-            slog("ho fatto il logout");
+            slog("[GUI->NET:%d] ricevuto richiesta di disconnessione", con->port);
             break;
 
         // gestisce l'uscita dalla chat eleminando gli utenti dalla chat
@@ -1274,7 +1408,6 @@ void gui_handler(){
             // rimuovo tutti gli utenti partecipanti alla chat
             clear_connections(&partecipants);
             GROUPMODE = 0;
-            slog("STO USCENDO DA QUITCHAT(%d)", con->port);
             ret = 1; // segnalo che è tutto a posto
             break;
 
@@ -1299,6 +1432,22 @@ void gui_handler(){
             ret = add_user(buffer);
             break;
 
+        case SHARE_CODE:
+            // nota: buffer contiene il nome dell'utente a cui mandare il file
+            ret = share_to_device(buffer);
+
+            if(ret > 0){
+                printf(ANSI_COLOR_GREEN "File inviato correttamente" ANSI_COLOR_RESET);
+                printf("\n\n");
+                fflush(stdout);
+            }
+            else {
+                printf(ANSI_COLOR_RED "C'è stato un errore con l'invio del file" ANSI_COLOR_RESET);
+                printf("\n\n");
+                fflush(stdout);
+            }
+            break;
+
         // BAD REQUEST
         default:
             ret = -1;
@@ -1307,10 +1456,6 @@ void gui_handler(){
     }
 
     // restituisco la risposta
-    slog("[NET:%d] sto per mandare a gui, ret: %d", con->port, ret);
-    //memset(answer, 0, sizeof(answer));
-    //sprintf(answer, "%d", ret);
-
     write(to_child_fd[1], &ret, sizeof(ret));
 }
 

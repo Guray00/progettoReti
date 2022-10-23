@@ -780,7 +780,7 @@ void gui_server_handler(){
     fscanf(stdin, "%s", command);
     fstdin();
 
-    if(strcmp(command, "exit") == 0){
+    if(strcmp(command, "esc") == 0){
         intHandler();
     }
 
@@ -863,9 +863,9 @@ int main(int argc, char* argv[]){
                 if(i == sd){
                     newConnection();
                 }
-
+                
                 // inserimento input                
-                if (i == fileno(stdin)){
+                else if (i == fileno(stdin)){
 
                     // gestisce i comandi digitati
                     gui_server_handler();

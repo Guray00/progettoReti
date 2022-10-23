@@ -545,8 +545,9 @@ void handle_message(){
 // MAIN DELLA GUI
 void startGUI(){    
         short int ret;  
-        char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];      
+        char command[15], user[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE], buffer[MAX_REQUEST_LEN];      
         int i;
+        char path[200];
 
         // Stampa il menu delle scelte
         print_menu();
@@ -734,9 +735,34 @@ void startGUI(){
                         print_menu();
                         break;
 
+                    // richiesta di invio di un file
+                    case SHARE_CODE:
+                        sscanf(command, "%s %[^\t\n]", user, path);
+
+                        // verifico che l'utente abbia fatto il login per inviare  questo comando
+                        if(login_limit()) {
+                            printf(ANSI_COLOR_RED "Questa funzione è disponibile solo se collegati.\n\n" ANSI_COLOR_RESET);
+                            fflush(stdout);
+                            break;
+                        }   
+
+                        // controllo che l'utente non tenti di inviare un file a se stesso
+                        if (strcmp(user, con->username) == 0){
+                            printf(ANSI_COLOR_RED "Non puoi inviare un file a te stesso!\n\n" ANSI_COLOR_RESET);
+                            fflush(stdout);
+                            break;
+                        }
+
+                        // invio la richiesta di invio file 
+                        sprintf(buffer, "%d %s %s", SHARE_CODE, user, path);
+                        ret = send_request_to_net(buffer);
+                        break;
+
+
                     // scelta errata
                     default:
                         printf("Scelta scorretta, reinserire: ");
+                        fflush(stdout);
                         break;
                 }
 
