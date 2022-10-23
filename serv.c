@@ -140,6 +140,24 @@ void intHandler() {
     // creo il codice identificativo
     short int code = LOGOUT_CODE;
     struct connection *p;
+    FILE *file;
+
+    // memorizzo che ho lasciato dei dispositivi con l'accesso
+    if(connection_size(&con) > 1){
+        file = fopen("./server_data/hardclose", "w");
+        if(file < 0){
+            exit(-1);
+        }
+        fprintf(file, "forced");
+        fclose(file);
+    }
+    else {
+        // se chiudo normalmente ed esiste il file di hardclose, lo elimino
+        if(file = fopen("./server_data/hardclose", "r")){
+            fclose(file);
+            system("rm ./server_data/hardclose");
+        }
+    }
 
     // genero la richiesta
     sprintf(buffer, "%d %s", code, "server");
@@ -217,13 +235,13 @@ unsigned long generate_user_hash(char* username){
 // * - username:  nome utente da aggiungere (verifica già compiuta)     *
 // * - port:      porta di comunicazione utilizzata dall'utente         *
 // **********************************************************************
-int add_entry_register(char* username){
+int add_empty_entry_register(char* username){
     FILE *file;
     //time_t t;
 
     file = fopen(FILE_REGISTER, "a");
     if(!file) {
-        perror("Erroe aggiunta entry");
+        perror("Errore aggiunta entry");
         return 0;
     }
 
@@ -233,6 +251,28 @@ int add_entry_register(char* username){
 
     return ret;
 }
+
+int add_entry_register(char* username, int port, unsigned long lin, unsigned long lon){
+    FILE *file;
+
+    file = fopen(FILE_REGISTER, "a");
+    if(!file) {
+        perror("Errore aggiunta entry");
+        return 0;
+    }
+
+    // essendo la prima connessione, login e logout coincidono (utente non connesso)
+    ret = (fprintf(file, "%s | %d | %lu | %lu\n", username, port,  lin, lon) > 0) ? 1 : 0;
+    fclose(file);
+
+    return ret;
+}
+
+// macro per l'aggiunta di una login entry nel registro
+int add_login_entry(char* username, int port){
+    return add_entry_register(username, port, (unsigned long) time(NULL), 0);
+}
+
 
 // aggiunge all'elenco degli utenti un utente
 // - usr: struttura contentente nome utente e password
@@ -324,10 +364,11 @@ short int isOnline(char *username){
                 res = 0;
 
             // in ogni altro caso l'utente è invece online, restituisco la porta
-            else
+            else{
                 res = p;
+                break;
+            }
 
-            break;
         }
     }
 
@@ -383,7 +424,7 @@ int signup(struct user usr){
 
         // aggiungo all'elenco degli utenti
         ret1 = add_entry_users(usr);
-        ret2 = add_entry_register(usr.username);
+        ret2 = add_empty_entry_register(usr.username);
 
         if (ret1 && ret2){
             slog("Utente \"%s\" aggiunto correttamente", &usr.username);
@@ -398,7 +439,7 @@ int signup(struct user usr){
     return 0;
 }
 
-
+// aggiorna una riga del file di registro, inserendovi il nuovo valore
 void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long lin, unsigned long lon){
     FILE *file, *tmp;               // file utilizzati
     char usr[MAX_USERNAME_SIZE];    // nome letto dal registro
@@ -423,7 +464,8 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
         
         // se leggo l'utente attuale scrivo nel file una nuova versione con login e logout aggiornato
         if(strcmp(usr, username) == 0) {
-            if(lin == 0) lin = li; // se viene fornito 0 al login significa che non è significativo
+            if(lin == 0) lin = li;  // se viene fornito 0 al login significa che non è significativo
+            if(port == 0) port = p; // se viene fornito 0 alla porta significa che non è significativa
             fprintf(tmp, "%s | %d | %lu | %lu\n", username, port, lin, lon);
 
             missing = 0;
@@ -449,20 +491,33 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
     system(command);
 }
 
+void update_logout_entry(char *username,  unsigned long lon){
+    updateRegister(username, 0, 0, lon);
+}
 
-
-int login(int sock, struct user usr, int port){
+int login(int sock, struct user usr, int port, unsigned long hardclose){
 
     int flag = auth(usr);
+    FILE* file;
 
     if (flag == 1){
-        struct connection *tmp, *tail;
-        // aggiornare il registro degli accessi con il timestamp attuale di login
-        // e 0 per segnalare che siamo ancora connessi
-        updateRegister(usr.username, port, (unsigned long) time(NULL), 0);
+        // struct connection *tmp, *tail;
+        // updateRegister(usr.username, port, (unsigned long) time(NULL), 0);
+        add_login_entry(usr.username, port);
 
         // imposta l'username alla connessione
         set_connection(&con, usr.username, sock);        
+    }
+    else if(flag == -2 && hardclose != 0){
+        if ((file = fopen("./server_data/hardclose", "r"))) {
+            fclose(file);
+            
+            //system("rm ./server_data/hardclose");
+            update_logout_entry(usr.username, hardclose);
+            add_login_entry(usr.username, port);
+            set_connection(&con, usr.username, sock);    
+            flag = 1;    
+        }
     }
 
     return flag;
@@ -880,6 +935,7 @@ int main(int argc, char* argv[]){
                     char *buf = buffer;   
                     char msg[MAX_MSG_SIZE];
                     char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; 
+                    unsigned long hardclose;
                     //char user[MAX_USERNAME_SIZE], password[MAX_PW_SIZE];
 
                     slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
@@ -905,7 +961,8 @@ int main(int argc, char* argv[]){
                         // DISCONNECT
                         case LOGOUT_CODE:
                             slog("[SERVER] Sto scollegando %s(%d)", get_username_by_connection(&con, i), i);
-                            updateRegister(get_username_by_connection(&con, i), port, (unsigned long) 0, (unsigned long) time(NULL)); // segno il logout del device
+                            //updateRegister(get_username_by_connection(&con, i), port, (unsigned long) 0, (unsigned long) time(NULL)); // segno il logout del device
+                            update_logout_entry(get_username_by_connection(&con, i), (unsigned long) time(NULL));
 
                             // rimuovo dalla lista la connessione i-esima
                             close_connection_by_socket(&con, i);
@@ -937,16 +994,8 @@ int main(int argc, char* argv[]){
                         // LOGIN
                         case LOGIN_CODE:     
                             // scompongo il buffer in [username | password | port]
-                           /* args = strtok(buffer, " ");
-                            strcpy(usr.username, args);
-                            args = strtok(NULL, " ");
-                            strcpy(usr.pw, args);
-                            args = strtok(NULL, " ");
-                            port = atoi(args);*/
-                            sscanf(buffer, "%s %s %d", usr.username, usr.pw, &port);
-
-
-                            ret = login(i, usr, port);
+                            sscanf(buffer, "%s %s %d %lu", usr.username, usr.pw, &port, &hardclose);
+                            ret = login(i, usr, port, hardclose);
 
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);

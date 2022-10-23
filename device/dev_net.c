@@ -101,8 +101,6 @@ void logout_devices(){
 
     // la testa non deve essere eliminata perchè contiene le informazioni
     // de device
-    // print_connection(&con);
-    //sleep(1);
     for (p = con->next; p != NULL; p = next){
 
         // salvo il puntatore al prossimo elemento
@@ -131,6 +129,8 @@ void logout_devices(){
 void logout_server(){
     // creo il buffer per la richiesta
     char buffer[MAX_REQUEST_LEN];
+    FILE *file;
+    char path[200];
 
     // creo il codice identificativo
     short int code = LOGOUT_CODE;
@@ -144,6 +144,18 @@ void logout_server(){
         FD_CLR(sd, &master);
         //close_connection_by_socket(&con, sd); // non funziona perchè il server non è tra le connessioni
         slog("==> chiuso socket %d", sd);
+    }
+
+    // se il logout non va a buon fine significa che il server non è attivo
+    // devo allora memorizzare in locale il timestamp in modo da aggiornarlo di nuovo
+    // al prossimo login
+    else {
+        slog("salvo timestamp del logout in locale");
+        sprintf(path, "./devices_data/%s/%s", con->username, LOGOUT_FILE);
+        file = fopen(path, "w");
+        
+        fprintf(file, "%lu", (unsigned long) time(NULL));
+        fclose(file);
     }
     
 }
@@ -1275,6 +1287,8 @@ void gui_handler(){
     char username[MAX_USERNAME_SIZE], password[MAX_USERNAME_SIZE];
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
     struct connection *p, *q;
+    FILE* file;
+    unsigned long hardclose;
 
     // recupero il tipo di richiesta in base al codice
     read(to_parent_fd[0], read_buffer, MAX_REQUEST_LEN);
@@ -1312,15 +1326,21 @@ void gui_handler(){
             // se non è stato possibile connettersi al server
             // chiedo di tornare indietro
             if (ret < 0) break;
-            
-            // recupero password e porta
-            // sprintf(read_buffer, "%s|%d", read_buffer, con->port);
-            // args = strtok(buffer, "|");
-            // strcpy(con->username, args);
-            // args = strtok(NULL, "|");
+
+
+            sprintf(read_buffer, "./devices_data/%s/%s", con->username, LOGOUT_FILE);
+            if((file = fopen(read_buffer, "r"))){
+                fscanf(file, "%lu", &hardclose);                // leggo il timestamp scritto 
+                fclose(file);                                   // chiudo il file
+                sprintf(buffer, "rm %s", read_buffer);          // elimino il file
+                system(buffer);                                 // eseguo il comando di delete
+            }
+            else {
+                hardclose = 0;                                  // non bisogna forzarlo
+            }
 
             // invio la richiesta di accesso al server
-            sprintf(buffer, "%hd %s %s %d", LOGIN_CODE, con->username, password, con->port);
+            sprintf(buffer, "%hd %s %s %d %lu", LOGIN_CODE, con->username, password, con->port, hardclose);
             ret = send_server_request(buffer);
             if (ret <= 0) break;
 

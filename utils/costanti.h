@@ -60,6 +60,7 @@
 #define SHOW_FILE           "show"
 #define CONTACTS_FILE       "contacts"
 #define AVAILABLE_FILE      "available"
+#define LOGOUT_FILE         "logout"
 // =======================================
 
 #define PORT_NOT_KNOWN       0000
