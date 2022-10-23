@@ -38,8 +38,8 @@ int ret;
 
 // menu per un utente non collegato
 const char MENU[] = 
-    "1) signup  [usr] [pw]" ANSI_COLOR_GREY " ⟶   Crea un nuovo account" ANSI_COLOR_RESET "\n"
-    "2) in      [usr] [pw]" ANSI_COLOR_GREY " ⟶   Accedi al tuo account" ANSI_COLOR_RESET "\n\n"
+    "1) signup [port] [usr] [pw]" ANSI_COLOR_GREY " ⟶   Crea un nuovo account" ANSI_COLOR_RESET "\n"
+    "2) in     [port] [usr] [pw]" ANSI_COLOR_GREY " ⟶   Accedi al tuo account" ANSI_COLOR_RESET "\n\n"
     ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
 
 // menu per un utente collegato
@@ -420,7 +420,7 @@ int available_request_to_net(){
     return ret;
 }
 
-
+// fa partire una chat
 void start_chat(char *dst){
     char msg[MAX_MSG_SIZE]; 
     int msg_size;

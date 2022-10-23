@@ -379,6 +379,12 @@ short int isOnline(char *username){
         }
     }
 
+    // nel caso in cui fosse assente l'utente
+    if(res == -2){
+        add_empty_entry_register(username);
+        ret = 1;
+    }
+
     // chiudo il file e restituisco il risultato
     fclose(file);
     return res;
