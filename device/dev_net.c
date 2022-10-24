@@ -386,6 +386,11 @@ void server_handler(){
             close(sd);
 
             break;
+
+        case READ_CODE:
+            sprintf(buffer, "%s ha letto i messaggi", buffer);
+            notify(buffer, ANSI_COLOR_CYAN);
+            break;
     }
 }
 
@@ -1314,7 +1319,7 @@ void gui_handler(){
             // chiedo di tornare indietro
             if (ret < 0) break;
 
-            sprintf(buffer, "%hd %s %s", SIGNUP_CODE, username, password);
+            sprintf(buffer, "%hd %s %s %d", SIGNUP_CODE, username, password, DEVICE_PORT);
             send_server_request(buffer);
 
             // 1 creato, 0 se non creato, -1 errore

@@ -30,6 +30,7 @@
 #define WHOIS_CODE        103
 #define QUITCHAT_CODE     104
 #define CREATEGROUPCON_CODE 105
+#define READ_CODE         106
 
 #define ISONLINE_CODE     200
 #define AVAILABLE_CODE    201

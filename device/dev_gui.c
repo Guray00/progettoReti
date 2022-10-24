@@ -44,11 +44,11 @@ const char MENU[] =
 
 // menu per un utente collegato
 const char MENU2[] = 
-    "1) hanging            " ANSI_COLOR_GREY " ⟶   Resoconto messaggi ricevuti mentre eri offline" ANSI_COLOR_RESET "\n"
-    "2) show     [username]" ANSI_COLOR_GREY " ⟶   Mostra i messaggi riceuti mentre eri offline" ANSI_COLOR_RESET "\n"
-    "3) chat     [username]" ANSI_COLOR_GREY " ⟶   Parla con qualcuno!" ANSI_COLOR_RESET "\n"
-    "4) share              " ANSI_COLOR_GREY " ⟶   Condividi un documente con un utente" ANSI_COLOR_RESET "\n"
-    "5) out                " ANSI_COLOR_GREY " ⟶   Esci dall'account" ANSI_COLOR_RESET "\n\n"
+    "1) hanging                   " ANSI_COLOR_GREY " ⟶   Resoconto messaggi ricevuti mentre eri offline" ANSI_COLOR_RESET "\n"
+    "2) show     [username]       " ANSI_COLOR_GREY " ⟶   Mostra i messaggi riceuti mentre eri offline" ANSI_COLOR_RESET "\n"
+    "3) chat     [username]       " ANSI_COLOR_GREY " ⟶   Parla con qualcuno!" ANSI_COLOR_RESET "\n"
+    "4) share    [username] [file]" ANSI_COLOR_GREY " ⟶   Condividi un documente con un utente" ANSI_COLOR_RESET "\n"
+    "5) out                       " ANSI_COLOR_GREY " ⟶   Esci dall'account" ANSI_COLOR_RESET "\n\n"
     ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
 
 

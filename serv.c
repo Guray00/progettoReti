@@ -242,7 +242,7 @@ unsigned long generate_user_hash(char* username){
 // * - username:  nome utente da aggiungere (verifica già compiuta)     *
 // * - port:      porta di comunicazione utilizzata dall'utente         *
 // **********************************************************************
-int add_empty_entry_register(char* username){
+int add_empty_entry_register(char* username, int port){
     FILE *file;
     //time_t t;
 
@@ -253,7 +253,7 @@ int add_empty_entry_register(char* username){
     }
 
     // essendo la prima connessione, login e logout coincidono (utente non connesso)
-    ret = (fprintf(file, "%s | %d | %lu | %lu\n", username, PORT_NOT_KNOWN,  (unsigned long)time(NULL), (unsigned long)time(NULL)) > 0) ? 1 : 0;
+    ret = (fprintf(file, "%s | %d | %lu | %lu\n", username, port,  (unsigned long)time(NULL), (unsigned long)time(NULL)) > 0) ? 1 : 0;
     fclose(file);
 
     return ret;
@@ -381,7 +381,7 @@ short int isOnline(char *username){
 
     // nel caso in cui fosse assente l'utente
     if(res == -2){
-        add_empty_entry_register(username);
+        add_empty_entry_register(username, PORT_NOT_KNOWN);
         ret = 1;
     }
 
@@ -428,7 +428,7 @@ int auth(struct user usr) {
     return result;
 }
 
-int signup(struct user usr){
+int signup(struct user usr, int port){
     int ret1, ret2;
 
     // se non esiste già un utente registrato lo registriamo
@@ -437,7 +437,7 @@ int signup(struct user usr){
 
         // aggiungo all'elenco degli utenti
         ret1 = add_entry_users(usr);
-        ret2 = add_empty_entry_register(usr.username);
+        ret2 = add_empty_entry_register(usr.username, port);
 
         if (ret1 && ret2){
             slog("Utente \"%s\" aggiunto correttamente", &usr.username);
@@ -771,10 +771,25 @@ void send_show(int device, char* mittente){
     char usr[MAX_USERNAME_SIZE];
     char path[100];
     char cmd[100];
+    char buffer[MAX_REQUEST_LEN];
+    struct connection* p;
+    FILE *file;
     
     // recupero il nome del file che mi interessa
     strcpy(usr, get_username_by_connection(&con, device));
     sprintf(path, "./server_data/%s/%s.txt", usr, mittente);
+
+    // la notifica di lettura deve essere inviata solo se il file non è vuoto
+    if((file = fopen(path, "r"))){
+        fclose(file);
+
+        // informo colui che ha inviato i messaggi dell'avvenuta ricezione
+        p = find_connection(&con, mittente);
+        if(p!=NULL){
+            sprintf(buffer, "%hd %s", READ_CODE, usr);
+            send_request(p->socket, buffer);
+        }
+    }
 
     // mando il file contenente le informazioni 
     // sui messaggi pendenenti per l'utente
@@ -784,10 +799,7 @@ void send_show(int device, char* mittente){
     // motivo per cui devono essere rimossi
     sprintf(cmd, "rm %s", path);
     system(cmd);
-    remove_from_hanging_file(usr, mittente);
-
-    // informo colui che ha inviato i messaggi dell'avvenuta ricezione
-    // TODO: notifica avvenuta lettura
+    remove_from_hanging_file(usr, mittente);   
 }
 
 
@@ -809,9 +821,6 @@ void send_whois(int device, char* buf){
 
     // calcolo l'hash per l'utente che ha scritto
     hash_correct = generate_user_hash(username);
-    //printf("TESTING %s\n", username);
-    //printf("hash corretto:  %lu\n", hash_correct);
-    //printf("hash originale: %lu\n", hash_value);
 
     // se l'hash corrisponde, ritorno 1
     if (hash_correct == hash_value){
@@ -1054,10 +1063,10 @@ int main(int argc, char* argv[]){
 
                         // SIGNUP
                         case SIGNUP_CODE:     
-                            sscanf(buffer, "%s %s", usr.username, usr.pw);
+                            sscanf(buffer, "%s %s %d", usr.username, usr.pw, &port);
 
 
-                            ret = signup(usr);
+                            ret = signup(usr, port);
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
 
