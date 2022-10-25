@@ -95,6 +95,7 @@ int init(const char* addr, int port){
     }
 
     slog("server in ascolto su: %d", port); 
+    return ret;
 }
 
 // trova la porta in cui deve avvenire la comunicazione
@@ -140,7 +141,6 @@ void intHandler() {
     // creo il codice identificativo
     short int code = LOGOUT_CODE;
     struct connection *p;
-    FILE *file;
 
 
     // DEPRECATO
@@ -222,7 +222,7 @@ unsigned long generate_user_hash(char* username){
     }
 
     res = 0;
-    while(fscanf(file, "%s | %s", &usr, &pw) != EOF) {
+    while(fscanf(file, "%s | %s", usr, pw) != EOF) {
 
         // se ho trovato l'utente
         if(strcmp(usr, username) == 0) {
@@ -285,7 +285,6 @@ int add_login_entry(char* username, int port){
 // - usr: struttura contentente nome utente e password
 int add_entry_users(struct user usr){
     FILE *file;
-    time_t t;
 
     file = fopen(FILE_USERS, "a");
     if(!file) {
@@ -302,6 +301,8 @@ int add_entry_users(struct user usr){
 int find_entry_register(struct user u) {
     FILE *file;
     char usr[MAX_USERNAME_SIZE];
+    unsigned long lon, lin;         // login e logout timestamp
+    int port;                       // la porta letta
 
     file = fopen(FILE_REGISTER, "r");
 
@@ -310,7 +311,7 @@ int find_entry_register(struct user u) {
         return 0;
     }
 
-    while(fscanf(file, "%s | %d | %lu | %lu", &usr, NULL, NULL, NULL) != EOF) {
+    while(fscanf(file, "%s | %d | %lu | %lu", usr, &port, &lin, &lon) != EOF) {
         if(strcmp(usr, u.username) == 0) {
             fclose(file);
             return 1;
@@ -323,7 +324,7 @@ int find_entry_register(struct user u) {
 
 int find_entry_users(char* username) {
     FILE *file;
-    char usr[MAX_USERNAME_SIZE];
+    char usr[MAX_USERNAME_SIZE], pw[MAX_PW_SIZE];
 
     file = fopen(FILE_USERS, "r");
 
@@ -332,7 +333,7 @@ int find_entry_users(char* username) {
         return 0;
     }
 
-    while(fscanf(file, "%s | %s", &usr, NULL) != EOF) {
+    while(fscanf(file, "%s | %s", usr, pw) != EOF) {
         if(strcmp(usr, username) == 0) {
             return 1;
         }
@@ -361,7 +362,7 @@ short int isOnline(char *username){
     }
 
     // analizzo ogni riga del registro per scoprire se l'utente è online
-    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &lin, &lout) != EOF) {
+    while(fscanf(file, "%s | %d | %lu | %lu", usr, &p, &lin, &lout) != EOF) {
 
         // se ho trovato l'utente nel registro
         if(strcmp(usr, username) == 0) {
@@ -413,7 +414,7 @@ int auth(struct user usr) {
 
     // di default considero con l'utente come non trovato
     result = 0;
-    while(fscanf(file, "%s | %s", &username, &password) != EOF) {
+    while(fscanf(file, "%s | %s", username, password) != EOF) {
         if(strcmp(usr.username, username) == 0 && strcmp(usr.pw, password) == 0) {
 
             // se l'utente è offline
@@ -473,7 +474,7 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
     }
 
     // per ogni riga letta dal registro la copio nel file temporaneo
-    while(fscanf(file, "%s | %d | %lu | %lu", &usr, &p, &li, &lo) != EOF) {
+    while(fscanf(file, "%s | %d | %lu | %lu", usr, &p, &li, &lo) != EOF) {
         
         // se leggo l'utente attuale scrivo nel file una nuova versione con login e logout aggiornato
         if(strcmp(usr, username) == 0) {
@@ -511,26 +512,18 @@ void update_logout_entry(char *username,  unsigned long lon){
 int login(int sock, struct user usr, int port, unsigned long hardclose){
 
     int flag = auth(usr);
-    FILE* file;
 
     if (flag == 1){
-        // struct connection *tmp, *tail;
-        // updateRegister(usr.username, port, (unsigned long) time(NULL), 0);
         add_login_entry(usr.username, port);
 
         // imposta l'username alla connessione
         set_connection(&con, usr.username, sock);        
     }
     else if(flag == -2 && hardclose != 0){
-        //if ((file = fopen("./server_data/hardclose", "r"))) {
-        //    fclose(file);
-            
-            //system("rm ./server_data/hardclose");
         update_logout_entry(usr.username, hardclose);
         add_login_entry(usr.username, port);
         set_connection(&con, usr.username, sock);    
         flag = 1;    
-        //}
     }
 
     return flag;
@@ -538,7 +531,7 @@ int login(int sock, struct user usr, int port, unsigned long hardclose){
 
 // gestisce la richiesta di nuova connessione di un dispositivo
 void newConnection(){
-    int clen = sizeof(clientaddr);
+    socklen_t clen = sizeof(clientaddr);
     int fd;
 
     // accetto richiesta e salvo l'informazione nel socket csd
@@ -592,7 +585,7 @@ int update_hanging_file(char* dst, char* src){
     total = 0;
     
     // per ogni riga letta dal registro la copio nel file temporaneo
-    while(fscanf(file, "%lu %s %d", &timestamp, &usr, &n) != EOF) {
+    while(fscanf(file, "%lu %s %d", &timestamp, usr, &n) != EOF) {
         
         // se non è la riga che cerco la riscrivo
         if(strcmp(usr, src) != 0) {
@@ -654,7 +647,7 @@ int remove_from_hanging_file(char* dst, char* src){
     total = 0;
     
     // per ogni riga letta dal registro la copio nel file temporaneo
-    while(fscanf(file, "%lu %s %d", &timestamp, &usr, &n) != EOF) {
+    while(fscanf(file, "%lu %s %d", &timestamp, usr, &n) != EOF) {
         
         // se non è la riga che cerco la riscrivo
         if(strcmp(usr, src) != 0) {
@@ -709,7 +702,7 @@ void send_file(char* path, int device){
     char cmd[100];
     char buffer[MAX_REQUEST_LEN];
     char c;
-    int size, remain_data, sent_bytes;
+    int size;
 
     // recupero il path della cartella
     char dirpath[100];
@@ -1019,13 +1012,11 @@ int main(int argc, char* argv[]){
                 else {
                     short int code;
                     int bytes_to_receive, received_bytes;
-                    char *args;       
                     short int response;
                     char *buf = buffer;   
                     char msg[MAX_MSG_SIZE];
                     char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; 
                     unsigned long hardclose;
-                    //char user[MAX_USERNAME_SIZE], password[MAX_PW_SIZE];
 
                     slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
 
@@ -1042,7 +1033,7 @@ int main(int argc, char* argv[]){
                     }
 
 
-                    sscanf(buffer, "%hd %[^\n\t]", &code, &buffer);
+                    sscanf(buffer, "%hd %[^\n\t]", &code, buffer);
                     slog("server ricevuto richiesta [%hd]", code);
 
                     switch(code){
@@ -1112,7 +1103,6 @@ int main(int argc, char* argv[]){
 
                             // se il dispositivo è raggiungibile
                             if (ret > 0){
-                                char req [MAX_REQUEST_LEN];
                                 // restituisco i dati a chi ha chiesto
                                 sprintf(buffer, "%d %s", ret, ADDRESS);
                             }
