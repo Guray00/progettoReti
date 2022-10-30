@@ -830,6 +830,43 @@ void print_online_header(){
     fflush(stdout);
 }
 
+// permette di stampare timestamp e porta di un utente
+// questa funzione viene utilizzata per stampare la lista degli utenti online
+void  print_timestamp_and_port(char* username){
+    FILE *file;
+    char usr[MAX_USERNAME_SIZE];
+    unsigned long lon, lin;         // login e logout timestamp
+    int port;                       // la porta letta
+    time_t rawtime;
+    struct tm ts;
+    char buffer[200];
+
+    file = fopen(FILE_REGISTER, "r");
+
+    if(!file) {
+        perror("Errore apertura file registro");
+        return;
+    }
+
+    while(fscanf(file, "%s | %d | %lu | %lu", usr, &port, &lin, &lon) != EOF) {
+        if(strcmp(usr, username) == 0 && lon == 0){
+            rawtime = lin;
+            ts = *localtime(&rawtime);
+            strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &ts);
+
+            printf(" * ");
+            printf(ANSI_COLOR_GREEN "%s" ANSI_COLOR_RESET, buffer);
+            printf(" * ");
+            printf(ANSI_COLOR_MAGENTA "%d" ANSI_COLOR_RESET, port);
+            printf("\n");
+            break;
+        }
+    }
+
+    fclose(file);
+}
+
+// mostra a schermo quali utenti sono attualmente online
 int print_online(){
     FILE *file;
     char usr[MAX_USERNAME_SIZE], simb, pw[MAX_PW_SIZE];
@@ -852,8 +889,8 @@ int print_online(){
 
         sscanf(line, "%s %c %s", usr, &simb, pw);
         if(isOnline(usr)){
-            printf("• %s%-16s%s - ", ANSI_COLOR_BLUE, usr, ANSI_COLOR_RESET);
-            printf(ANSI_COLOR_GREEN "online\n" ANSI_COLOR_RESET);
+            printf("• %s%-16s%s", ANSI_COLOR_BLUE, usr, ANSI_COLOR_RESET);
+            print_timestamp_and_port(usr); // stampa a schermo timestamp e porta dell'utente trovato
         }
     }
 
