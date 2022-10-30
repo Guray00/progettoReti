@@ -18,7 +18,6 @@
 #include "../utils/graphics.h"
 #include "../API/logger.h"
 
-#define SIZE 10
 #define ONLINE  1
 #define OFFLINE 0
 
@@ -33,14 +32,12 @@ extern struct connection* con;
 
 // memorizza lo status di loggato o meno
 short unsigned int STATUS = OFFLINE;
-//char SCENE [MAX_USERNAME_SIZE];
 int ret;
 
 // menu per un utente non collegato
 const char MENU[] = 
     "1) signup [port] [usr] [pw]" ANSI_COLOR_GREY " ⟶   Crea un nuovo account" ANSI_COLOR_RESET "\n"
-    "2) in     [port] [usr] [pw]" ANSI_COLOR_GREY " ⟶   Accedi al tuo account" ANSI_COLOR_RESET "\n\n"
-    ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
+    "2) in     [port] [usr] [pw]" ANSI_COLOR_GREY " ⟶   Accedi al tuo account" ANSI_COLOR_RESET "\n\n";
 
 // menu per un utente collegato
 const char MENU2[] = 
@@ -48,9 +45,7 @@ const char MENU2[] =
     "2) show     [username]       " ANSI_COLOR_GREY " ⟶   Mostra i messaggi riceuti mentre eri offline" ANSI_COLOR_RESET "\n"
     "3) chat     [username]       " ANSI_COLOR_GREY " ⟶   Parla con qualcuno!" ANSI_COLOR_RESET "\n"
     "4) share    [username] [file]" ANSI_COLOR_GREY " ⟶   Condividi un documente con un utente" ANSI_COLOR_RESET "\n"
-    "5) out                       " ANSI_COLOR_GREY " ⟶   Esci dall'account" ANSI_COLOR_RESET "\n\n"
-    ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
-
+    "5) out                       " ANSI_COLOR_GREY " ⟶   Esci dall'account" ANSI_COLOR_RESET "\n\n";
 
 
 
@@ -63,12 +58,15 @@ void print_header(char* header){
     printf("\n");
 }
 
+// header del menu principale
 void print_menu(){
     print_header("MENU PRINCIPALE");
     printf(MENU);
     fflush(stdout);
 }
 
+
+// header del menu una volta fatto l'accesso
 void print_logged_menu(char* username, int port){
     char buffer[100];
 
@@ -89,7 +87,6 @@ int command_to_code(char *buffer){
     char command[20];
     // mi assicuro di prendere solo la prima parola, ovvero il comando
     sscanf(buffer, "%s %[^\n]", command, buffer);
-    slog("COMANDO ORA VALE: %s", command);
 
     if (strcmp(command, "signup") == 0)
         return SIGNUP_CODE;
@@ -121,18 +118,13 @@ int command_to_code(char *buffer){
 
 // MACRO  per inviare al network una richiesta
 int send_request_to_net(char* buffer){
-    //char ret_code[4];//, result;
     int result = 0;
 
     // GUI -> NET, invio la richiesta
-    slog("SONO SEND->net invio %s", buffer);
     write(to_parent_fd[1], buffer, MAX_REQUEST_LEN);
 
     // NET -> GUI, aspetto la risposta
     read(to_child_fd[0], &result, sizeof(result));
-    slog("SONO SEND->net HO RICEVUTO: %hd", result);
-    //slog("mannaggia sono send_request e ricevo: %d", result);
-    //result = atoi(ret_code);               // converto la risposta
 
     return result;
 }
@@ -140,7 +132,6 @@ int send_request_to_net(char* buffer){
 void send_request_to_net_without_response(char* buffer){
 
     // GUI -> NET, invio la richiesta senza attendere una risposta
-    slog("SONO SEND->net SENZA RISPOSTA invio %s", buffer);
     write(to_parent_fd[1], buffer, MAX_REQUEST_LEN);
 
 }
@@ -256,9 +247,7 @@ int send_msg_to_net(char *dst, char *msg){
     
     memset(buffer, 0, sizeof(buffer));
     sprintf(buffer, "%d %s %s", SENDMSG_CODE, dst, msg);
-    slog("[GUI->NET] sei passato da send_msg_to_net: %s", buffer);
     ret = send_request_to_net(buffer);
-    slog("[GUI->NET] sei tornato da send_msg_to_net: %d", ret);
     return ret;
 }
 
@@ -312,13 +301,11 @@ int hanging(){
     fclose(file);
 
     printf("\n\nPremi [INVIO] per tornare indietro: ");
-    //fstdin();   // pulisco da eventuali residui
     getchar();  // aspetto la pressione di "invio"
 
     // mostro nuovamente a schermo il vecchio menu
     system("clear");
     print_logged_menu(con->username, con->port);
-    //fstdin();   // pulisco l'input
 
     return 0;
 }
@@ -428,9 +415,6 @@ void start_chat(char *dst){
     char buffer[MAX_REQUEST_LEN];
     char user[MAX_USERNAME_SIZE];
 
-    
-    // funzione di utility per liberare lo standard input
-    //fstdin();
 
     // prende l'input dell'utente
     do  {
@@ -528,10 +512,7 @@ void handle_message(){
     switch (code){
     case STARTCHAT_CODE:
 
-        // quando parte la chat potrebbe essere interrotta una vecchia richiesta
-        // di inserimento di uno comando. Per questo motivo, nel caso in cui lo stdin
-        // fosse vuoto vi si scrive un carattere e si cancella la risposta a schermo.
-        slog("[NET:%d]passato da qua", con->port);
+        // il mittente non è importante in quanto è una chat di gruppo
         start_chat("inutile");
         break;
     
@@ -590,7 +571,6 @@ void startGUI(){
             
                 // chiede l'inserimento di un comando
                 fscanf(stdin, "%[^\n]", command);
-                slog("STO CICLANDO(%d): %s", con->port, command);
                 fstdin();
                 switch(command_to_code(command)){
 

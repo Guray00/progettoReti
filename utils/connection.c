@@ -64,8 +64,6 @@ struct connection* remove_connection(struct connection **con){
     next = (*con)->next;
     prev = (*con)->prev;
     
-    // libero la memoria dell'elemento da cancellare
-    //free(*con);
 
     // se il prossimo elemento esiste, imposto che punti al mio precedente
     if(next) next->prev = prev;   
@@ -86,25 +84,6 @@ struct connection* remove_connection(struct connection **con){
 
     // restituisco un puntatore al prossimo elemento
     return next;
-    
-
-    /*
-    struct connection *p = 0; 
-    struct connection *q;
-
-    for (q = (*con); q != 0 && q->inf != ; q = q->pun)
-        p = q;
-    
-    if (q == 0) 
-        return false;
-    
-    if (q == p0)
-        p0 = q->pun;
-    else
-        p->pun = q->pun;
-    
-    delete q;
-    return true;*/
 
 }
 

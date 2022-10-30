@@ -10,7 +10,7 @@
 #include "./graphics.h"
 #include "./costanti.h"
 
-// stampa una riga di asterischi
+// stampa una riga divisoria
 void print_separation_line(){
     struct winsize w;
     int i;
@@ -37,6 +37,7 @@ void print_centered(char* txt){
     printf("\n");
 }
 
+// stampa centralmente il testo ma con i bordi tratteggiati
 void print_centered_dotted(char* txt){
     int size, len, i;
     struct winsize w;
@@ -65,6 +66,7 @@ void notify(char* msg, char *COLOR){
     printf("\n");
 }
 
+// formatta il messaggio per la visualizzazione
 void format_msg(char *formatted_msg, char *source, char* msg){
     char src [MAX_USERNAME_SIZE + 2] = "[";
 
@@ -74,6 +76,7 @@ void format_msg(char *formatted_msg, char *source, char* msg){
     sprintf(formatted_msg, "\033[0;35m%-10s\033[0m %s", src, msg);
 }
 
+// mostra l'header della chat di gruppo
 void print_group_chat_header(){
     system("clear");
     print_separation_line(); // ***

@@ -54,9 +54,7 @@ const char ADDRESS[] = "127.0.0.1";
 const char MENU[] = 
     "1) help " ANSI_COLOR_GREY " ⟶   Mostra questa pagina di informazioni" ANSI_COLOR_RESET "\n"
     "2) list " ANSI_COLOR_GREY " ⟶   Mostra quali utenti sono attualmente online" ANSI_COLOR_RESET "\n"
-    "2) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n"
-    ANSI_COLOR_MAGENTA "[COMANDO]: " ANSI_COLOR_RESET;
-
+    "2) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n";
 
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
@@ -142,29 +140,6 @@ void intHandler() {
     short int code = LOGOUT_CODE;
     struct connection *p;
 
-
-    // DEPRECATO
-    // memorizzo che ho lasciato dei dispositivi con l'accesso
-    /*
-    if(connection_size(&con) > 1){
-        // genero la cartella se non esiste
-        system("mkdir -p ./server_data/");
-
-        // creo il file per memorizzare l'uscita errata
-        file = fopen("./server_data/hardclose", "w");
-        if(file < 0){
-            exit(-1);
-        }
-        fprintf(file, "forced");
-        fclose(file);
-    }
-    else {
-        // se chiudo normalmente ed esiste il file di hardclose, lo elimino
-        if(file = fopen("./server_data/hardclose", "r")){
-            fclose(file);
-            system("rm ./server_data/hardclose");
-        }
-    }*/
 
     // genero la richiesta
     sprintf(buffer, "%d %s", code, "server");
@@ -473,11 +448,14 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
         return;
     }
 
+    // slog("la porta vale: %d", port);
+
+
     // per ogni riga letta dal registro la copio nel file temporaneo
     while(fscanf(file, "%s | %d | %lu | %lu", usr, &p, &li, &lo) != EOF) {
         
         // se leggo l'utente attuale scrivo nel file una nuova versione con login e logout aggiornato
-        if(strcmp(usr, username) == 0) {
+        if(strcmp(usr, username) == 0 && lo == 0) {
             if(lin == 0) lin = li;  // se viene fornito 0 al login significa che non è significativo
             if(port == 0) port = p; // se viene fornito 0 alla porta significa che non è significativa
             fprintf(tmp, "%s | %d | %lu | %lu\n", username, port, lin, lon);
@@ -945,10 +923,6 @@ int main(int argc, char* argv[]){
     // imposto di default alla richiesta errata
     request = -1;
 
-
-    //FD_SET(fileno(stdin), &master);
-    //fd_max = (fileno(stdin) > fd_max) ? fileno(stdin) : fd_max;
-
     // inizializzo la lista di connessioni
     con = (void*) malloc(sizeof(struct connection));
     con->socket = sd;
@@ -1000,13 +974,7 @@ int main(int argc, char* argv[]){
                 if(i == sd){
                     newConnection();
                 }
-                
-                // inserimento input                
-                /*else if (i == fileno(stdin)){
-
-                    // gestisce i comandi digitati
-                    gui_server_handler();
-                }*/
+            
                
                 // in tutti gli altri casi sono i devices che effettuano le richieste
                 else {
@@ -1041,7 +1009,6 @@ int main(int argc, char* argv[]){
                         // DISCONNECT
                         case LOGOUT_CODE:
                             slog("[SERVER] Sto scollegando %s(%d)", get_username_by_connection(&con, i), i);
-                            //updateRegister(get_username_by_connection(&con, i), port, (unsigned long) 0, (unsigned long) time(NULL)); // segno il logout del device
                             update_logout_entry(get_username_by_connection(&con, i), (unsigned long) time(NULL));
 
                             // rimuovo dalla lista la connessione i-esima
@@ -1086,7 +1053,6 @@ int main(int argc, char* argv[]){
 
                         case ISONLINE_CODE:
                             ret = isOnline(buffer);
-                            slog("STO RESTITUNODO: %hd <------", ret);
                             response = htons(ret);
                             send(i, (void*) &response, sizeof(uint16_t), 0);
                             break;
@@ -1122,7 +1088,7 @@ int main(int argc, char* argv[]){
                             // recupero il mittente del messaggio analizzando le connessioni
                             strcpy(src, get_username_by_connection(&con, i));
 
-                            slog("pendant from %s to %s", src, dst);
+                            slog("pendant da %s a %s", src, dst);
                             write_pendant(src, dst, msg);
                             break;
 

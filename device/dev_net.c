@@ -107,7 +107,6 @@ void logout_devices(){
         next = p->next;
 
         // genero la richiesta
-        slog("===> STO CONTATTANDO: %s(%d)", p->username, p->socket);
         sprintf(buffer, "%d %s", LOGOUT_CODE, con->username);
 
         // invio la richiesta al device
@@ -123,7 +122,7 @@ void logout_devices(){
 
     }
 
-    slog("ho finito con i device");
+    slog("Tutti i device informati del logout");
 }
 
 void logout_server(){
@@ -142,7 +141,6 @@ void logout_server(){
         // se è andata a buon fine termino
         close(sd);
         FD_CLR(sd, &master);
-        //close_connection_by_socket(&con, sd); // non funziona perchè il server non è tra le connessioni
         slog("==> chiuso socket %d", sd);
     }
 
@@ -192,8 +190,6 @@ int init_listen_socket(int port){
         exit(-1);
     }
 
-    // imposto il socket di ascolto
-    //con->socket = listener;
 
     // salvo il mio indirizzo per ricevere le richieste
     memset(&myaddr, 0, sizeof(myaddr)); // pulizia
@@ -245,7 +241,7 @@ int init_server_connection(int port){
 }
 
 // MACRO per la ricezione di un codice di risposta da un device
-short int recive_code_from_device(int fd){
+short int receive_code_from_device(int fd){
     short int res_code;
     ret = recv(fd, (void*) &res_code, sizeof(res_code), 0);
     if(ret < 0){
@@ -258,7 +254,7 @@ short int recive_code_from_device(int fd){
 }
 
 // MACRO per la ricezione di un codice di risposta dal server
-short int recive_code_from_server(){
+short int receive_code_from_server(){
     short int res_code;
     ret = recv(sd, (void*) &res_code, sizeof(res_code), 0);
     if(ret < 0){
@@ -267,7 +263,6 @@ short int recive_code_from_server(){
     }
 
     res_code = ntohs(res_code);
-    //slog("network riceve: %hd", res_code);
 
     return res_code;
 }
@@ -277,13 +272,11 @@ int send_device_request(int fd, char buffer[MAX_REQUEST_LEN]){
     int bytes_to_send, sent_bytes;
     char* buf = buffer;
 
-    // if (!FD_ISSET(fd, &master)) return -1;
-
     bytes_to_send = MAX_REQUEST_LEN;
     while(bytes_to_send > 0) {
         sent_bytes = send(fd, (void*) buf, bytes_to_send, 0);
         if(sent_bytes == -1 || sent_bytes == 0){
-            slog("ERRORE INVIO %d, inviati: %d", fd, sent_bytes);
+            slog("Errore invio %d, inviati: %d", fd, sent_bytes);
             perror("errore invio richiesta device");
             return -1;
         } 
@@ -297,11 +290,7 @@ int send_device_request(int fd, char buffer[MAX_REQUEST_LEN]){
 
 // generalizzazione di una richiesta
 int send_request(int code, int fd, char buffer[MAX_REQUEST_LEN]){
-    //int bytes_to_send; , sent_bytes;
     char command [MAX_REQUEST_LEN];
-
-    // controllo che effettivamente sia raggiungibile
-    // if (!FD_ISSET(fd, &master)) return -1;
 
     sprintf(command, "%d %s", code, buffer);
     ret = send_device_request(fd, command);
@@ -318,7 +307,7 @@ int send_server_request(char buffer[MAX_REQUEST_LEN]){
 }
 
 // MACRO per la ricezione di richieste dal server
-void recive_from_server(char buffer[MAX_REQUEST_LEN]){
+void receive_from_server(char buffer[MAX_REQUEST_LEN]){
     memset(buffer, 0, MAX_REQUEST_LEN); // resetto il contenuto del buffer
     
     int bytes_to_receive, received_bytes;
@@ -339,10 +328,8 @@ void recive_from_server(char buffer[MAX_REQUEST_LEN]){
 }
 
 // MACRO per la ricezione di richieste dal server
-int recive_from_device(char *buffer, int fd){
+int receive_from_device(char *buffer, int fd){
     memset(buffer, 0, MAX_REQUEST_LEN); // resetto il contenuto del buffer
-
-    //if (!FD_ISSET(fd, &master)) return -1;
     
     int bytes_to_receive, received_bytes;
     char *buf = buffer;    
@@ -369,7 +356,7 @@ void server_handler(){
     short int code;                     // codice della richiesta effettuata
 
     // ricevo dal buffer
-    recive_from_server(buffer);
+    receive_from_server(buffer);
     sscanf(buffer, "%hd %s", &code, buffer);
 
     slog("[NET:%d] Ricevuto da server [%hd] e (%s)", DEVICE_PORT, code, buffer);
@@ -387,6 +374,7 @@ void server_handler(){
 
             break;
 
+        // conferma di avvenuta lettura
         case READ_CODE:
             sprintf(buffer, "%s ha letto i messaggi", buffer);
             notify(buffer, ANSI_COLOR_CYAN);
@@ -432,7 +420,7 @@ int check_user_in_contacts(char *user){
 }
 
 // gestisce l'arrivo di un messaggio P2P
-void recive_p2p_msg(int device, char *buffer){
+void receive_p2p_msg(int device, char *buffer){
 
     char src[MAX_USERNAME_SIZE];
     char formatted_msg[MAX_REQUEST_LEN];
@@ -440,7 +428,6 @@ void recive_p2p_msg(int device, char *buffer){
     // genero la richiesta per la gui
     strcpy(src, get_username_by_connection(&con, device));
 
-    //if (strcmp(src, SCENE) == 0){
     // se trovo l'utente tra i partecipanti
     if (find_connection(&partecipants, src) != NULL){
         format_msg(formatted_msg, src, buffer);
@@ -538,7 +525,7 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
     // stabilire una connessione e le traduco in:
     // [RISPOSTA INDIRIZZO PORTA], dove risposta stabilisce se l'utente 
     // non esiste(-1), offline(0),  online(1)
-    recive_from_server(buffer);
+    receive_from_server(buffer);
     sscanf(buffer, "%d %s", &response, address);
     
 
@@ -572,23 +559,12 @@ struct connection* create_connection(char dst[MAX_USERNAME_SIZE]){
 
         // genero la richiesta di verifica hash e la invio al nuovo dispositivo
         sprintf(buffer, "%s %lu", con->username, my_hash);
-        //slog("HO CONFEZIONATO: %s", buffer);
         send_device_request(fd, buffer);
 
         // aggiungo alla lista la nuova connessione
         newcon = new_connection(&con, fd);
         set_connection(&con, dst, fd);  // imposto il nome del nuovo socket
         newcon->port = response;        // imposto la porta
-
-        // se sono in un gruppo, accetto subito!
-        /*if (GROUPMODE == 1) {
-            new_passive_connection(&partecipants, dst);
-            slog("HO AGGIUNTO PASSIVO: %s", dst);
-        }*/
-
-        // la connessione tra i device è avvenuta,
-        // aggiungo alla lista delle connessioni
-        // slog("[NET:%d] connessione tra i device avvenuta", con->port);
 
         return newcon;
     }
@@ -631,7 +607,7 @@ void show_as_p2p(int fd){
     // mostro a schermo il parsing del contenuto del file
     while((read=getline(&line, &l, file)) != -1){
         line[strcspn(line, "\n")] = 0;
-        recive_p2p_msg(fd, line);
+        receive_p2p_msg(fd, line);
     }
 
     // chiudo il file
@@ -645,13 +621,10 @@ void show_as_p2p(int fd){
 // messaggio inviato come pendente al server, in modo che venga inviato
 // quando l'untente farà l'accesso
 int send_pendant_to_server(char dst[MAX_USERNAME_SIZE], char msg[MAX_MSG_SIZE]){
-    //short int code = PENDANTMSG_CODE;
-
     char buffer[MAX_REQUEST_LEN];
 
     sprintf(buffer, "%d %s %s", PENDANTMSG_CODE, dst, msg);
     ret = send_server_request(buffer);
-    
     
     return ret;
 }
@@ -695,7 +668,6 @@ int send_msg(char* buffer){
             // la connessione adesso è stata stabilita, dunque si 
             // manda il messaggio direttamente al socket
             else {
-                // slog("la connessione è appena stata stabilita");
                 sprintf(buffer, "%s è attualmente online", dst);
                 notify(buffer, ANSI_COLOR_GREEN);
                 ret = send_request(CHAT_CODE, dst_connection->socket, msg);
@@ -704,8 +676,6 @@ int send_msg(char* buffer){
 
         // connessione trovata perchè creata precedentemente
         else {
-            slog("questa è una connessione precedente");
-            slog("--> in particolare con: %s (%d)", dst_connection->username, dst_connection->socket);
             ret = send_request(CHAT_CODE, dst_connection->socket, msg);
         }
 
@@ -716,13 +686,9 @@ int send_msg(char* buffer){
     // Nota: lo dobbiamo aggiungere solo se correttamente inviato
     if(connection_size(&partecipants) < 2 && ret > 0){
         append_sent_msg_to_historic(original, msg);
-        // slog("=========================");
-        // slog("AGGIUNGO ALLA CRONOLOGIA di %s il messaggio verso %s: %s", con->username, original, msg);
-        // slog("=========================");
     }
 
     if(ret > 0) ret = 1;
-    slog("SENDMSG ritorna, RET VALE: %d", ret);
     return ret;
 }
 
@@ -777,7 +743,7 @@ int send_file(int device, char* path){
 }
 
 // funzione utilizzata per la ricezione di file
-int recive_file(int fd, char *path){
+int receive_file(int fd, char *path){
     FILE* file;
     char buffer[MAX_REQUEST_LEN];
     char dirpath[100];
@@ -795,7 +761,7 @@ int recive_file(int fd, char *path){
     file = fopen(path, "w");
 
     // ricevo il numero di byte che mi verranno inviati
-    recive_from_device(buffer, fd);
+    receive_from_device(buffer, fd);
     sscanf(buffer, "%d", &size);
     slog("buffer=> %s, sto per ricevere %d byte", buffer, size);
 
@@ -820,18 +786,19 @@ int recive_file(int fd, char *path){
 }
 
 // riceve un file da un altro device
-int recive_file_from_device(int fd, char* path){
+int receive_file_from_device(int fd, char* path){
     char realpath[200];
     
     // converto la richiesta
     sprintf(realpath, "./devices_data/%s/%s", con->username, path);
     slog("salverà in: %s", realpath);
 
-    ret = recive_file(fd, realpath);
-    slog("recive_file_from_device riceve %d", ret);
+    ret = receive_file(fd, realpath);
+    slog("receive_file_from_device riceve %d", ret);
     return ret;
 }
 
+// invial la richiesta di hanging verso il server
 int hanging_request_server(){
     char buffer[MAX_REQUEST_LEN];
     char path[100];
@@ -847,7 +814,7 @@ int hanging_request_server(){
     if (ret < 0) return ret;
 
     // aspetto di ricevere il file di hanging
-    ret = recive_file(sd, path);
+    ret = receive_file(sd, path);
     if (ret < 0) return ret;
 
     return 0;
@@ -877,7 +844,7 @@ int show_request_server(char *mittente){
     if (ret < 0) return ret;
 
     // aspetto di ricevere il file di per show
-    ret = recive_file(sd, path);
+    ret = receive_file(sd, path);
     if (ret < 0) return ret;
 
     // Il file è stato ricevuto, è compito allora del network aggiornare
@@ -947,7 +914,7 @@ int available_request_server(){
         ret = send_server_request(buffer);
         if (ret == -1) break;
 
-        ret = recive_code_from_server();
+        ret = receive_code_from_server();
         if (ret == -1) break;
 
         // se l'utente risulta online, lo scrivo tra i disponibili
@@ -1019,9 +986,6 @@ void switch_to_group(){
     print_group_chat_header();
     GROUPMODE = 1;
 
-    // write(fileno(stdin), "a\n", 2);
-    // printf("\033[A\r\33[2K"); 
-
     // avverto la gui di avviare una chat per far avvenire l'inserimento
     sprintf(buffer, "%hd", STARTCHAT_CODE);
     send_request_to_gui(buffer);
@@ -1033,7 +997,7 @@ int send_group_invite(struct connection *dst){
     if (ret < 0) return ret;
 
     // 0 se rifiuta la connessione, 1 se accetta, -1 se errore
-    ret = recive_code_from_device(dst->socket);
+    ret = receive_code_from_device(dst->socket);
 
     return ret;
 }
@@ -1059,7 +1023,8 @@ int add_user(char *dst){
     ret = send_group_invite(c);
     if(ret <= 0) return ret;
 
-    // notify("Nuova chat di gruppo avviata", ANSI_COLOR_GREY);
+    notify("Nuova chat di gruppo avviata", ANSI_COLOR_GREY);
+    GROUPMODE = 1;
 
     // scorro tutti i partecipanti alla chat
     for(p = partecipants; p != NULL; p = p->next){
@@ -1105,7 +1070,7 @@ void device_handler(int device){
     struct connection *newp;            // per la richiesta di nuovo partecipante
 
     // ricevo dal buffer la richiesta
-    recive_from_device(buffer, device);
+    receive_from_device(buffer, device);
     sscanf(buffer, "%hd %[^\t\n]", &code, buffer);
 
     slog("[NET -> NET] %hd %s", code, buffer);
@@ -1134,7 +1099,7 @@ void device_handler(int device){
             // NOTA: in buffer è presente il contenuto del messaggio
 
             // gestisco graficamente la ricezione del messaggio
-            recive_p2p_msg(device, buffer);
+            receive_p2p_msg(device, buffer);
             
             // il messaggio ricevuto deve anche essere scritto nella cronologia, 
             // solamente se si tratta di una chat singola
@@ -1187,8 +1152,18 @@ void device_handler(int device){
         
         // abilita la visulaizzazione della chat di gruppo
         case ENABLEGROUP_CODE:
+
+            // costringo l'interfaccia grafica a far partire la chat solo
+            // se non già attiva
+            if (connection_size(&partecipants) < 2){
+                switch_to_group();
+            }
+            else {
+                notify("E' stata avviata una chat di gruppo", ANSI_COLOR_GREY);
+                GROUPMODE = 1;
+            }
+
             new_passive_connection(&partecipants, find_connection_by_socket(&con, device)->username);
-            switch_to_group();
             break;
 
         // invio richiesta di uscita dalla chat
@@ -1213,13 +1188,15 @@ void device_handler(int device){
         // ricevuta richiesta di ricezione file
         case SHARE_CODE:
             // nota: buffer contiene il path in cui salvare il file
-            slog("sto per ricevere ->%s<-", buffer);
-            ret = recive_file_from_device(device, buffer);
+            slog("sto per ricevere %s byte", buffer);
+            ret = receive_file_from_device(device, buffer);
 
+            // se il file è stato correttamente ricevuto
             if(ret >= 0) {
                 sprintf(tmp, "Ricevuto file \"%s\"", buffer);
                 notify(tmp, ANSI_COLOR_GREEN);
             }
+            // altrimenti notifico che c'è stato qualche problema
             else {
                 sprintf(tmp, "Errore ricezione file \"%s\"", buffer);
                 notify(tmp, ANSI_COLOR_RED);
@@ -1229,7 +1206,7 @@ void device_handler(int device){
     }
 }
 
-
+// informo gli utenti l'uscita dalla chat
 int send_quitchat_to_device(int fd){
     char buffer[MAX_REQUEST_LEN];
 
@@ -1239,7 +1216,7 @@ int send_quitchat_to_device(int fd){
     return ret;
 }
 
-// permette di effettuare lo share di un messaggio
+// permette di effettuare lo share di un file
 int share_to_device(char* buffer){
     char user[MAX_USERNAME_SIZE];
     char path[200];
@@ -1291,12 +1268,12 @@ int share_to_device(char* buffer){
     return ret;
 }
 
+// gestisce le richieste provenineti dalla gui
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
     short int code;                     // codice della richiesta effettuata
     int server_port;                    // porta su cui contattare il server
-    // char* args;
     char username[MAX_USERNAME_SIZE], password[MAX_USERNAME_SIZE];
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
     struct connection *p, *q;
@@ -1323,7 +1300,7 @@ void gui_handler(){
             send_server_request(buffer);
 
             // 1 creato, 0 se non creato, -1 errore
-            ret = recive_code_from_server();
+            ret = receive_code_from_server();
 
             // disconnettiamo dal server
             FD_CLR(sd, &master);
@@ -1358,7 +1335,7 @@ void gui_handler(){
             if (ret <= 0) break;
 
             // 1 se è connesso, 0 se non trovato, -2 se già acceduto
-            ret = recive_code_from_server();
+            ret = receive_code_from_server();
 
             // Se il risultato è 0 le credenziali erano errate, se il risultato era -2 era già online l'utente
             // In entrambi i casi la connessione deve essere eliminata
@@ -1377,6 +1354,7 @@ void gui_handler(){
 
             break;
 
+        // gestione richiesta di una nuova chat
         case CHAT_CODE:
             // Verifico che l'utente con il quale si vuole parlare sia effettivamente
             // nella lista dei contatti
@@ -1408,7 +1386,6 @@ void gui_handler(){
         // SEND MESSAGE REQUEST
         case SENDMSG_CODE:
             ret = send_msg(buffer);
-            slog("fine case sendmsg ret vale: %d", ret);
             break;
 
         // SEND HANGING REQUEST
@@ -1514,11 +1491,6 @@ void startNET(){
     
     FD_SET(to_parent_fd[0], &master);           // aggiungo le risposte dal server in ascolto
     fdmax = (to_parent_fd[0] > fdmax) ? to_parent_fd[0] : fdmax;
-    
-    
-    // FD_SET(to_child_fd[1], &master);            // aggiungo le risposte dal server in ascolto
-    // fdmax = (to_child_fd[1] > fdmax) ? to_child_fd[1] : fdmax;
-    
 
     do{
         //  seleziono i socket che sono attivi
@@ -1542,7 +1514,6 @@ void startNET(){
 
                 // [GUI-HANDLER] se la gui mi ha inviato un messaggio
                 if(i == to_parent_fd[0]){     
-                    slog("CHIAMO GUI HANDLER: %d", to_parent_fd[0]); 
                     gui_handler();
                 }
 
@@ -1573,16 +1544,13 @@ void startNET(){
                     }
 
                     // verification - aspetto di ricevere dal device l'hash che lo identifica
-                    ret = recive_from_device(req, fd);
-                    //if(ret < 0) break;
+                    ret = receive_from_device(req, fd);
 
                     // controllo mediante server se l'utente è chi dice di essere
-                    //slog("IL DEVICE MI HA PASSATO %s", req);
                     ret = send_request(WHOIS_CODE, sd, req);
-                    //if(ret < 0) break;
 
                     // attendo la risposta dal server
-                    result = recive_code_from_server();
+                    result = receive_code_from_server();
 
                     // autentificazione confermata, instauro la connessione
                     if (result > 0){
@@ -1611,9 +1579,9 @@ void startNET(){
                     
                     // autentificazione fallita, chiudo la comunicazione
                     else {
-                        printf("\nCONNESSIONE MALEVOLA INDIVIDUATA\n");
+                        printf("\nconnessione malevola individuata\n");
                         fflush(stdout);
-                        slog("CONNESSIONE MALEVOLA INDIVIDUATA");
+                        slog("connessione malevola individuata");
                         close(fd);
                     }
 
@@ -1625,7 +1593,7 @@ void startNET(){
                     device_handler(i);
                 }
 
-                if (ret < 0) slog("qualche problema in net");
+                if (ret < 0) slog("Problema sconosciuto verificato nel network");
             }
         }
     } while(1);
