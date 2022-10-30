@@ -414,6 +414,7 @@ void start_chat(char *dst){
     short int status;
     char buffer[MAX_REQUEST_LEN];
     char user[MAX_USERNAME_SIZE];
+    char file_path[200];
 
 
     // prende l'input dell'utente
@@ -432,7 +433,7 @@ void start_chat(char *dst){
 
         // se il contenuto non è vuoto mando
         // il messaggio al mittente
-        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 && !strstr(msg, "\\a")){
+        if(strcmp(msg, "") != 0 && strcmp(msg, "\\q") != 0 && strcmp(msg, "\\u") != 0 && !strstr(msg, "\\a") && !strstr(msg, "\\share")){
 
             // costtruisco il messaggio formattato con gli abbellimenti grafici
             // e lo mostro a schermo
@@ -469,7 +470,7 @@ void start_chat(char *dst){
             }
         }
 
-            // se viene richiesto di aggiungere un utente
+        // se viene richiesto di aggiungere un utente
         else if(strstr(msg, "\\a")){
             // recupero il nome dell'utente da aggiungere
             sscanf(msg, "%s %s", buffer, user);
@@ -486,6 +487,18 @@ void start_chat(char *dst){
                 printf("\n\n");
                 fflush(stdout);
             }
+        }
+
+        // gestione invio di un file all'interno di una chat
+        else if(strstr(msg, "\\share")){
+            // recupero il nome del file da inviare
+            sscanf(msg, "%s %s", buffer, file_path);
+
+            // costruisco la richiesta per net di condividere file
+            sprintf(buffer, "%d%s", SHAREGROUP_CODE, file_path);
+
+            // invio la richiesta al network
+            ret = send_request_to_net(buffer);
         }
 
     } while(strcmp(msg, "\\q") != 0);

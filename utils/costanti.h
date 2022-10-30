@@ -21,6 +21,7 @@
 #define HANGING_CODE        5
 #define SHOW_CODE           6
 #define SHARE_CODE          7
+#define SHAREGROUP_CODE     8
 
 #define LOGOUT_CODE        10
 
@@ -46,6 +47,7 @@
 
 #define DOMAIN              AF_INET
 #define MAX_REQUEST_LEN     255
+#define PATH_SIZE           200
 
 #define MAX_USERNAME_SIZE   16
 #define MAX_PW_SIZE         16

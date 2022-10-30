@@ -535,7 +535,7 @@ int update_hanging_file(char* dst, char* src){
     FILE *file, *tmp;                   // file utilizzati
     char command[500];                  // comando costruito per rinominare il file
     char cmd2[500];                     // comando costruito per rinominare il file
-    char path[100], tmp_path[100];      // per memorizzare i path dei file
+    char path[PATH_SIZE], tmp_path[PATH_SIZE]; // per memorizzare i path dei file
 
     char usr[MAX_USERNAME_SIZE];        // username letto dal file
     unsigned long timestamp;            // timestamp letto dal file
@@ -598,7 +598,7 @@ int remove_from_hanging_file(char* dst, char* src){
     FILE *file, *tmp;                   // file utilizzati
     char command[500];                  // comando costruito per rinominare il file
     char cmd2[500];                     // comando costruito per rinominare il file
-    char path[100], tmp_path[100];      // per memorizzare i path dei file
+    char path[PATH_SIZE], tmp_path[PATH_SIZE];      // per memorizzare i path dei file
 
     char usr[MAX_USERNAME_SIZE];        // username letto dal file
     unsigned long timestamp;            // timestamp letto dal file
@@ -649,7 +649,7 @@ int remove_from_hanging_file(char* dst, char* src){
 // scrive un messaggio pendente per un destinatario
 void write_pendant(char* src, char* dst, char* msg){
     FILE *file;
-    char path[500];
+    char path[PATH_SIZE];
     char command[500];
 
     // creo i file se non esistono

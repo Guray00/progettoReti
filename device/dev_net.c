@@ -129,7 +129,7 @@ void logout_server(){
     // creo il buffer per la richiesta
     char buffer[MAX_REQUEST_LEN];
     FILE *file;
-    char path[200];
+    char path[PATH_SIZE];
 
     // creo il codice identificativo
     short int code = LOGOUT_CODE;
@@ -385,8 +385,8 @@ void server_handler(){
 // verifica la presenza di un utente all'interno dei contatti
 int check_user_in_contacts(char *user){
     FILE *file;
-    char buffer[200];
-    char path[50];
+    char buffer[PATH_SIZE];
+    char path[PATH_SIZE];
     char *line = NULL;
     ssize_t read;
     size_t l;
@@ -697,7 +697,7 @@ int send_file(int device, char* path){
     FILE *file;
     char cmd[100];
     char buffer[MAX_REQUEST_LEN];
-    char real_path[200];
+    char real_path[PATH_SIZE];
     char c;
     int size;
 
@@ -787,7 +787,7 @@ int receive_file(int fd, char *path){
 
 // riceve un file da un altro device
 int receive_file_from_device(int fd, char* path){
-    char realpath[200];
+    char realpath[PATH_SIZE];
     
     // converto la richiesta
     sprintf(realpath, "./devices_data/%s/%s", con->username, path);
@@ -1217,9 +1217,10 @@ int send_quitchat_to_device(int fd){
 }
 
 // permette di effettuare lo share di un file
+// la richiesta contiene i campi: [CODE] [USER] [PATH]
 int share_to_device(char* buffer){
     char user[MAX_USERNAME_SIZE];
-    char path[200];
+    char path[PATH_SIZE];
     struct connection *dst_connection;
 
     sscanf(buffer, "%s %[^\t\n]", user, path);
@@ -1457,6 +1458,37 @@ void gui_handler(){
                 printf("\n\n");
                 fflush(stdout);
             }
+            break;
+
+        case SHAREGROUP_CODE:
+            // nota: buffer contiene il nome del file da inviare
+
+            if (connection_size(&partecipants) < 1){
+                printf(ANSI_COLOR_RED "Nessun destinatario a cui inviare il file!" ANSI_COLOR_RESET);
+                printf("\n\n");
+                fflush(stdout);
+                break;
+            }
+
+            for(p = partecipants; p != NULL; p = p->next){
+                sprintf(read_buffer, "%s %s", p->username, buffer);
+                ret = share_to_device(read_buffer);
+
+                if(ret < 0) break;
+            }
+
+            if(ret > 0){
+                printf(ANSI_COLOR_GREEN "File inviato correttamente" ANSI_COLOR_RESET);
+                printf("\n\n");
+                fflush(stdout);
+            }
+
+            else {
+                printf(ANSI_COLOR_RED "C'è stato un errore con l'invio del file" ANSI_COLOR_RESET);
+                printf("\n\n");
+                fflush(stdout);
+            }
+            
             break;
 
         // BAD REQUEST
