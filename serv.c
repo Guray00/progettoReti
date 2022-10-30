@@ -56,6 +56,19 @@ const char MENU[] =
     "2) list " ANSI_COLOR_GREY " ⟶   Mostra quali utenti sono attualmente online" ANSI_COLOR_RESET "\n"
     "2) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n";
 
+const char expanded_help[] = 
+    ANSI_COLOR_BLUE "help: \n" ANSI_COLOR_RESET
+    "Mostra a schermo la seguente schermata. "
+    "\n\n"
+    ANSI_COLOR_BLUE"list:\n" ANSI_COLOR_RESET
+    "Mostra un elenco in cui vengono elencati tutti gli utenti attualmente online. "
+    "Per ciascuno di essi viene mostrato: nome utente, timestamp di login, porta di accesso."
+    "\n\n"
+    ANSI_COLOR_BLUE "esc:\n" ANSI_COLOR_RESET
+    "Permette la chiusura sicura del server. Una volta fatto ciò i device non saranno "
+    "in grado di effettuare l'accesso o interagire con il server.\n\n";
+
+
 // funzione per l'inizializzazione del server
 int init(const char* addr, int port){
     const int enable = 1;
@@ -902,6 +915,25 @@ int print_online(){
     return 0;
 }
 
+void print_help_header(){
+    print_separation_line();
+    print_centered("HELP");
+    print_separation_line();
+    printf("\n");
+    fflush(stdout);
+}
+
+void help(){
+    system("clear");
+    
+    print_help_header();
+    printf(expanded_help);
+
+    printf("\n\nPremi [INVIO] per tornare indietro: ");
+    fflush(stdout);
+    getchar();  // aspetto la pressione di "invio"
+}
+
 void gui_int_handler(){
     kill(getppid(), SIGINT);
     exit(0);
@@ -918,6 +950,7 @@ void gui_server_handler(){
     }
 
     else if (strcmp(command, "help") == 0){
+        help();
         system("clear");
         print_menu();
     }
