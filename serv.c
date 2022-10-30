@@ -978,13 +978,13 @@ int main(int argc, char* argv[]){
                
                 // in tutti gli altri casi sono i devices che effettuano le richieste
                 else {
-                    short int code;
-                    int bytes_to_receive, received_bytes;
-                    short int response;
-                    char *buf = buffer;   
-                    char msg[MAX_MSG_SIZE];
-                    char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; 
-                    unsigned long hardclose;
+                    short int code;                             // codice della richiesta
+                    int bytes_to_receive, received_bytes;       // byte da ricevere e ricevuti
+                    short int response;                         // codice di risposta
+                    char *buf = buffer;                         // buffer per le richieste
+                    char msg[MAX_MSG_SIZE];                     // messaggio
+                    char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; // utente e source
+                    unsigned long hardclose;                    // campo per lo spegnimento a server spento
 
                     slog("[SERVER] servendo socket: %d (%s)", i, get_username_by_connection(&con, i));
 
@@ -994,6 +994,17 @@ int main(int argc, char* argv[]){
                         if(received_bytes == -1){
                             perror("errore ricezione richiesta per server");
                             exit(-1);
+                        }
+
+                        // se non ricevo dati l'utente con cui parlavo si è disconnesso. Devo dunque segnarlo 
+                        // come offline e chiudere la connessione.
+                        else if(received_bytes == 0){
+                            // aggiorno il campo del registro
+                            update_logout_entry(get_username_by_connection(&con, i), (unsigned long)  time(NULL));
+
+                            // disconnetto
+                            close_connection_by_socket(&con, i);
+                            FD_CLR(i, &master);
                         }
                             
                         bytes_to_receive -= received_bytes;
