@@ -1,8 +1,8 @@
 # progetto per Reti Informatiche
 
-## Avviare l'applicativo per la prima volta
+## Primo Avvio
 Per avviare l'applicativo e compilarlo è sufficiente eseguire il comando `make -B build`, oppure avviare il file `./compile_and_run.sh`. 
-*NB:* il file run.sh si occupa unicamente dell'avvio delle finestre dell'applicazione, motivo per cui è prima necessario compilare il progetto.
+**NB:** il file `run.sh` si occupa unicamente dell'avvio delle finestre dell'applicazione, motivo per cui è prima necessario compilare il progetto separatamente.
 
 ## Chat
 Ogni messaggio inviato in una chat comporta le seguenti spunte:
@@ -21,6 +21,9 @@ Di default sono presenti i seguenti utenti:
 | user1  | user1  |
 | user2  | user2  |
 | user3  | user3  |
+
+## Modalità debug
+E' possibile aprire una quinta shell contenente dei log di debug ponendo a `true` il flag `debug` all'interno del file `run.sh`.
 
 ## Problemi noti
 Può capitare che, al seguito del cambio di utente sulle varie shell, un device non sia in grado di contattarne un'altro restituendo una `connection refused`. Questo è probabilmente dovuto al fatto che i socket, una volta chiusi, non vengono liberati immediatamente.

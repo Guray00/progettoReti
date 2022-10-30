@@ -9,10 +9,8 @@ CONNECTION - Struttura dati
 La seguente è una struttura dati utilizzata dal server e dai devices
 per tenere traccia di tutte le connessione attualmente attive.
 
-La testa della lista è sempre il dispositivo stesso con le proprie informazioni.
-Tale scelta è stata effettuata per mantenere in modo consistente le informazioni
-prime dei devices e semplificare i casi limiti di estrazione in testa (che in questa 
-modalità non avvengono, essendo il device sempre attivo fin quando funziona).
+Spesso, la testa della lista è il dispositivo stesso con le proprie informazion,
+al fine di mantenere le informazioni base facilmente reperibili.
 */
 
 // restituisce un puntatore relativo a un utente passato mediante username
@@ -72,15 +70,6 @@ struct connection* remove_connection(struct connection **con){
     if(prev){
         prev->next = next;
     }
-    else {
-        // se entro significa che il precedente era NULL
-        // L'unico caso in cui il precedente è NULL è che si stia
-        // eseguendo un estrazione in testa. Dunque, se viene passata la testa,
-        // questa dovrà essere estratta è sarà necessario puntare al successivo
-        //con = &next;
-        // printf("ho sistemato la nuova testa\n");
-    } 
-
 
     // restituisco un puntatore al prossimo elemento
     return next;
@@ -188,6 +177,7 @@ void set_connection(struct connection** head, char username[MAX_USERNAME_SIZE], 
 
 }
 
+// reecupero l'username da una connessione
 char* get_username_by_connection(struct connection** head, int sock){
     struct connection *tmp;
 
@@ -205,6 +195,7 @@ char* get_username_by_connection(struct connection** head, int sock){
     return NULL;
 }
 
+// stampo a schermo le connessioni
 void print_connection(struct connection** head){
 
     struct connection* tmp;
@@ -226,18 +217,6 @@ void clear_connections(struct connection** head){
         *head = next;
     }
     
-
-   /*
-    for(i = 0; *head != NULL && i < 10; (*head) = next)  {
-        print_connection(head);
-        printf("i = %d\n", i);
-        i++;
-        sleep(1);
-
-        next = remove_connection(head);
-    }
-
-    */
 }
 
 // dato il nome di un utente, si aggiorna il suo socket
@@ -274,7 +253,7 @@ struct connection* new_passive_connection(struct connection** head, char *name){
     return tmp;
 }
 
-
+// calcolo la dimensione di una connection
 int connection_size(struct connection **head){
     struct connection* p;
     int counter = 0;
@@ -286,6 +265,7 @@ int connection_size(struct connection **head){
     return counter;
 }
 
+// rimuovo una connessione in base al socket
 int remove_connection_by_socket(struct connection **head, int fd){
 
     struct connection *p, *next;
@@ -304,7 +284,7 @@ int remove_connection_by_socket(struct connection **head, int fd){
     return 0;
 }
 
-
+// rimuovo una connessione in base all'username
 int remove_connection_by_username(struct connection **head, char *username){
 
     struct connection *p = NULL, *next = NULL;

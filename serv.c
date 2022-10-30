@@ -54,7 +54,7 @@ const char ADDRESS[] = "127.0.0.1";
 const char MENU[] = 
     "1) help " ANSI_COLOR_GREY " ⟶   Mostra questa pagina di informazioni" ANSI_COLOR_RESET "\n"
     "2) list " ANSI_COLOR_GREY " ⟶   Mostra quali utenti sono attualmente online" ANSI_COLOR_RESET "\n"
-    "2) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n";
+    "3) esc  " ANSI_COLOR_GREY " ⟶   Termina il server" ANSI_COLOR_RESET "\n\n";
 
 const char expanded_help[] = 
     ANSI_COLOR_BLUE "help: \n" ANSI_COLOR_RESET
