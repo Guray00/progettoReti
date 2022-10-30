@@ -35,7 +35,7 @@ extern struct connection *con;
 
 // tiene traccia di tutti gli utenti presenti all'interno di una chat
 struct connection *partecipants = NULL;
-unsigned short int GROUPMODE = 0;
+uint16_t GROUPMODE = 0;
 // ==========================================================================
 
 // GLOBAL ===================================================================
@@ -132,7 +132,7 @@ void logout_server(){
     char path[PATH_SIZE];
 
     // creo il codice identificativo
-    short int code = LOGOUT_CODE;
+    int16_t code = LOGOUT_CODE;
 
     // genero la richiesta di disconnessione dal server
     sprintf(buffer, "%d %s", code, con->username);
@@ -241,8 +241,8 @@ int init_server_connection(int port){
 }
 
 // MACRO per la ricezione di un codice di risposta da un device
-short int receive_code_from_device(int fd){
-    short int res_code;
+int16_t receive_code_from_device(int fd){
+    int16_t res_code;
     ret = recv(fd, (void*) &res_code, sizeof(res_code), 0);
     if(ret < 0){
         perror("Errore ricezione codice di risposta");
@@ -254,8 +254,8 @@ short int receive_code_from_device(int fd){
 }
 
 // MACRO per la ricezione di un codice di risposta dal server
-short int receive_code_from_server(){
-    short int res_code;
+int16_t receive_code_from_server(){
+    int16_t res_code;
     ret = recv(sd, (void*) &res_code, sizeof(res_code), 0);
     if(ret < 0){
         perror("Errore ricezione codice di risposta");
@@ -353,7 +353,7 @@ int receive_from_device(char *buffer, int fd){
 // Gestisce le richieste arrivate dal server e dirette al device
 void server_handler(){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
-    short int code;                     // codice della richiesta effettuata
+    int16_t code;                     // codice della richiesta effettuata
 
     // ricevo dal buffer
     receive_from_server(buffer);
@@ -941,7 +941,7 @@ int print_available(){
     char *line = NULL;
     ssize_t read;
     size_t l;
-    unsigned short int flag = 0;
+    uint16_t flag = 0;
 
     sprintf(path, "./devices_data/%s/%s", con->username, AVAILABLE_FILE);
 
@@ -1066,7 +1066,7 @@ int add_user(char *dst){
 void device_handler(int device){
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
     char tmp[MAX_REQUEST_LEN];          // buffer temporaneo
-    short int code;                     // codice della richiesta effettuata
+    int16_t code;                     // codice della richiesta effettuata
     struct connection *newp;            // per la richiesta di nuovo partecipante
 
     // ricevo dal buffer la richiesta
@@ -1220,10 +1220,13 @@ int send_quitchat_to_device(int fd){
 // la richiesta contiene i campi: [CODE] [USER] [PATH]
 int share_to_device(char* buffer){
     char user[MAX_USERNAME_SIZE];
-    char path[PATH_SIZE];
+    char path[PATH_SIZE], full_path[PATH_SIZE];
     struct connection *dst_connection;
 
-    sscanf(buffer, "%s %[^\t\n]", user, path);
+    sscanf(buffer, "%s %[^\t\n]", user, full_path);
+
+    // impedisce l'invio di file presenti in altre cartelle
+    strcpy(path, basename(full_path));
 
     // controllo che l'utente sia nella rubrica
     ret = check_user_in_contacts(user);
@@ -1273,7 +1276,7 @@ int share_to_device(char* buffer){
 void gui_handler(){
     char read_buffer[MAX_REQUEST_LEN];  // richiesta ricevuta dalla GUI
     char buffer[MAX_REQUEST_LEN];       // buffer con i parametri passati
-    short int code;                     // codice della richiesta effettuata
+    int16_t code;                     // codice della richiesta effettuata
     int server_port;                    // porta su cui contattare il server
     char username[MAX_USERNAME_SIZE], password[MAX_USERNAME_SIZE];
     char hash_buffer[MAX_USERNAME_SIZE + MAX_PW_SIZE + 1];
@@ -1558,7 +1561,7 @@ void startNET(){
                 // [LISTENER-HANDLER]
                 else if (i == listener){
                     int fd;
-                    short int result;
+                    int16_t result;
                     socklen_t l;
                     char req[MAX_REQUEST_LEN];
                     char username[MAX_USERNAME_SIZE];

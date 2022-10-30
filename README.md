@@ -1,4 +1,4 @@
-# progettoReti
+# progetto per Reti Informatiche
 
 ## Avviare l'applicativo per la prima volta
 Per avviare l'applicativo e compilarlo è sufficiente eseguire il comando `make -B build`, oppure avviare il file `./compile_and_run.sh`. 
@@ -21,3 +21,6 @@ Di default sono presenti i seguenti utenti:
 | user1  | user1  |
 | user2  | user2  |
 | user3  | user3  |
+
+## Problemi noti
+Può capitare che, al seguito del cambio di utente sulle varie shell, un device non sia in grado di contattarne un'altro restituendo una `connection refused`. Questo è probabilmente dovuto al fatto che i socket, una volta chiusi, non vengono liberati immediatamente.

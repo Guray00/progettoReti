@@ -34,7 +34,7 @@
 
     pid_t pid;  // pid del processo
 
-    short unsigned int request;
+    uint16_t request;
 
     fd_set 
         master,         // tutti i socket 
@@ -150,7 +150,7 @@ void intHandler() {
     char buffer[MAX_REQUEST_LEN];
 
     // creo il codice identificativo
-    short int code = LOGOUT_CODE;
+    int16_t code = LOGOUT_CODE;
     struct connection *p;
 
 
@@ -334,7 +334,7 @@ int find_entry_users(char* username) {
 /* port: utente online
       0: utente offline
      -2: utente non trovato   */
-short int isOnline(char *username){
+int16_t isOnline(char *username){
     FILE *file;
     char usr[MAX_USERNAME_SIZE];
     int res = -2;
@@ -390,7 +390,7 @@ int auth(struct user usr) {
     FILE *file;
     char username[MAX_USERNAME_SIZE];
     char password[MAX_PW_SIZE];
-    short int result;
+    int16_t result;
 
     file = fopen(FILE_USERS, "r");
     slog("[SERVER] Richiesta accesso utente per: %s | %s", usr.username, usr.pw);
@@ -449,7 +449,7 @@ void updateRegister(char username[MAX_USERNAME_SIZE], int port, unsigned long li
     unsigned long li;               // login timestamp letto
     unsigned long lo;               // logout timestamp letto
     char command[50];               // comando costruito per rinominare il file
-    unsigned short int missing = 1; // controlla se, per incongruenza, l'informazione è assente nel registro
+    uint16_t missing = 1; // controlla se, per incongruenza, l'informazione è assente nel registro
 
     // apro i file
     file = fopen(FILE_REGISTER, "r");
@@ -798,7 +798,7 @@ void send_whois(int device, char* buf){
     unsigned long hash_value;           // il valore dell'hash da verificare
     char username[MAX_USERNAME_SIZE];   // l'username passato a cui corrisponde l'hash
     unsigned long hash_correct;         // l'hash calcolato dal server per l'utente
-    short int response;                 // risposta del server al device
+    int16_t response;                 // risposta del server al device
 
     // recupero dal buffer i dati: [USERNAME] [HASH]
     sscanf(buf, "%s %lu", username, &hash_value);
@@ -1048,9 +1048,9 @@ int main(int argc, char* argv[]){
                
                 // in tutti gli altri casi sono i devices che effettuano le richieste
                 else {
-                    short int code;                             // codice della richiesta
+                    int16_t code;                             // codice della richiesta
                     int bytes_to_receive, received_bytes;       // byte da ricevere e ricevuti
-                    short int response;                         // codice di risposta
+                    int16_t response;                         // codice di risposta
                     char *buf = buffer;                         // buffer per le richieste
                     char msg[MAX_MSG_SIZE];                     // messaggio
                     char dst[MAX_USERNAME_SIZE], src[MAX_USERNAME_SIZE]; // utente e source

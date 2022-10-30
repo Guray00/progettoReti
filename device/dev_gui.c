@@ -175,6 +175,7 @@ int send_signup_request(int server_port, char user[MAX_USERNAME_SIZE], char pw[M
     return ret;
 }
 
+// verifica se un utente ha già effettuato l'accesso
 int login_limit(){
     if (STATUS != ONLINE) {
         return 1;
@@ -182,7 +183,6 @@ int login_limit(){
 
     return 0;
 }
-
 
 // verifica se un utente è già parte dei partecipanti
 short int checkUserOnline(char usr[MAX_USERNAME_SIZE]){
